@@ -276,6 +276,49 @@ int smb5_iio_get_prop(struct smb_charger *chg, int channel, int *val)
 	case PSY_IIO_TYPEC_ACCESSORY_MODE:
 		rc = smblib_get_usb_prop_typec_accessory_mode(chg, val);
 		break;
+	case PSY_IIO_HVDCP3_TYPE:
+		if (chg->real_charger_type != QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3)
+			*val = HVDCP3_NONE; /* 0: none hvdcp3 insert */
+		else {
+			if (chg->is_qc_class_a)
+				*val = HVDCP3_CLASSA_18W; /* 18W hvdcp3 insert */
+			else if (chg->is_qc_class_b)
+				*val = HVDCP3_CLASSB_27W; /* 27W hvdcp3 insert */
+			else
+				*val = HVDCP3_NONE;
+		}
+		break;
+	case PSY_IIO_QUICK_CHARGE_TYPE:
+		*val = smblib_get_quick_charge_type(chg);
+		break;
+	case PSY_IIO_PD_AUTHENTICATION:
+		*val = chg->pd_verifed;
+		break;
+	case PSY_IIO_TYPE_RECHECK:
+		rc = smblib_get_prop_type_recheck(chg, &pval);
+		*val = pval.intval;
+		break;
+	case PSY_IIO_DC_THERMAL_LEVELS:
+		rc = smblib_get_prop_dc_temp_level(chg, &pval);
+		*val = pval.intval;
+		break;
+	case PSY_IIO_CAPACITY_LEVEL:
+		rc = smblib_get_prop_batt_capacity_level(chg, &pval);
+		*val = pval.intval;
+		break;
+	case PSY_IIO_LIQUID_DETECTION:
+		if (chg->support_liquid == true)
+			rc = smblib_get_prop_liquid_status(chg, &pval);
+		else
+			*val = 0;
+		*val = pval.intval;
+		break;
+	case PSY_IIO_DYNAMIC_FV_ENABLED:
+		*val = chg->dynamic_fv_enabled;
+		break;
+	case PSY_IIO_CYCLE_COUNT:
+		rc = smblib_get_prop_from_bms(chg, SMB5_QG_CYCLE_COUNT, val);
+		break;
 	default:
 		pr_err("get prop %d is not supported\n", channel);
 		rc = -EINVAL;
@@ -523,6 +566,28 @@ int smb5_iio_set_prop(struct smb_charger *chg, int channel, int val)
 		break;
 	case PSY_IIO_FCC_STEPPER_ENABLE:
 		chg->fcc_stepper_enable = val;
+		break;
+	case PSY_IIO_PD_AUTHENTICATION:
+		chg->pd_verifed = val;
+		pval.intval = val;
+		rc = vote(chg->usb_icl_votable, PD_VERIFED_VOTER,
+				!chg->pd_verifed, PD_UNVERIFED_CURRENT);
+		break;
+	case PSY_IIO_TYPE_RECHECK:
+		pval.intval = val;
+		rc = smblib_set_prop_type_recheck(chg, &pval);
+		break;
+	case PSY_IIO_DC_THERMAL_LEVELS:
+		pval.intval = val;
+		if (chg->support_wireless)
+			rc = smblib_set_prop_dc_temp_level(chg, &pval);
+		break;
+	case PSY_IIO_LIQUID_DETECTION:
+		chg->lpd_status = val;
+		power_supply_changed(chg->batt_psy);
+		break;
+	case PSY_IIO_DYNAMIC_FV_ENABLED:
+		chg->dynamic_fv_enabled = !!val;
 		break;
 	default:
 		pr_err("get prop %d is not supported\n", channel);

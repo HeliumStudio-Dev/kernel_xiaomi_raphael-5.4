@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #ifndef __FG_CORE_H__
@@ -89,11 +90,21 @@
 
 #define FULL_CAPACITY			100
 #define FULL_SOC_RAW			255
+#define FULL_SOC_REPORT_THR		250
 
 #define DEBUG_BATT_SOC			67
 #define BATT_MISS_SOC			50
 #define ESR_SOH_SOC			50
 #define EMPTY_SOC			0
+
+#define VBAT_RESTART_FG_EMPTY_UV		3700000
+#define TEMP_THR_RESTART_FG		150
+#define RESTART_FG_START_WORK_MS		1000
+#define RESTART_FG_WORK_MS		2000
+#define EMPTY_REPORT_SOC		1
+
+#define VBAT_CRITICAL_LOW_THR		2800
+#define EMPTY_DEBOUNCE_TIME_COUNT_MAX		5
 
 enum prof_load_status {
 	PROFILE_MISSING,
@@ -330,12 +341,17 @@ struct fg_batt_props {
 	char		*batt_profile;
 	int		float_volt_uv;
 	int		vbatt_full_mv;
+	int		ffc_vbatt_full_mv;
 	int		fastchg_curr_ma;
+	int		nom_cap_uah;
 	int		*therm_coeffs;
 	int		therm_ctr_offset;
 	int		therm_pull_up_kohms;
 	int		*rslow_normal_coeffs;
 	int		*rslow_low_coeffs;
+	int		ffc_term_curr_ma;
+	int		ffc_low_temp_term_curr_ma;
+	int		ffc_high_temp_term_curr_ma;
 };
 
 struct fg_cyc_ctr_data {
@@ -419,11 +435,34 @@ static const struct fg_pt fg_tsmc_osc_table[] = {
 	{  90,		444992 },
 };
 
+#define BATT_MA_AVG_SAMPLES		8
+struct batt_params {
+	bool		update_now;
+	int		batt_raw_soc;
+	int		batt_soc;
+	int		samples_num;
+	int		samples_index;
+	int		batt_ma_avg_samples[BATT_MA_AVG_SAMPLES];
+	int		batt_ma_avg;
+	int		batt_ma_prev;
+	int		batt_ma;
+	int		batt_mv;
+	int		batt_temp;
+	struct timespec64	last_soc_change_time;
+};
+
 struct fg_memif {
 	struct fg_dma_address	*addr_map;
 	int			num_partitions;
 	u16			address_max;
 	u8			num_bytes_per_word;
+};
+
+struct cold_thermal {
+	int index;
+	int temp_l;
+	int temp_h;
+	int curr_th;
 };
 
 struct fg_dev {
@@ -461,6 +500,7 @@ struct fg_dev {
 	u32			mem_if_base;
 	u32			rradc_base;
 	u32			wa_flags;
+	int			cycle_count;
 	u32			esr_wakeup_ms;
 	u32			awake_status;
 	int			batt_id_ohms;
@@ -478,6 +518,8 @@ struct fg_dev {
 	int			last_recharge_volt_mv;
 	int			delta_temp_irq_count;
 	enum esr_filter_status	esr_flt_sts;
+	int			vbatt_full_volt_uv;
+	int			vbat_critical_low_count;
 	bool			profile_available;
 	enum prof_load_status	profile_load_status;
 	bool			battery_missing;
@@ -488,19 +530,37 @@ struct fg_dev {
 	bool			use_ima_single_mode;
 	bool			usb_present;
 	bool			twm_state;
+	bool			report_full;
 	bool			use_dma;
 	bool			qnovo_enable;
+	bool			empty_restart_fg;
+	bool			profile_already_find;
+	bool			input_present;
+	bool			batt_temp_low;
+	bool			shutdown_delay;
+	/* cold thermal related */
+	struct cold_thermal *cold_thermal_seq;
+	int			cold_thermal_len;
+	int			curr_cold_thermal_level;
 	enum fg_version		version;
 	bool			suspended;
+	struct batt_params	param;
+	struct delayed_work	soc_monitor_work;
 	struct completion	soc_update;
 	struct completion	soc_ready;
 	struct delayed_work	profile_load_work;
 	struct work_struct	status_change_work;
 	struct work_struct	esr_sw_work;
 	struct delayed_work	sram_dump_work;
+	int			fake_authentic;
+	int			fake_chip_ok;
+	int			maxim_cycle_count;
+	int			batt_fake_temp;
 	struct work_struct	esr_filter_work;
 	struct alarm		esr_filter_alarm;
 	ktime_t			last_delta_temp_time;
+	struct delayed_work	empty_restart_fg_work;
+	struct delayed_work	soc_work;
 };
 
 /* Other definitions */
@@ -580,6 +640,7 @@ struct fg_dt_props {
 };
 
 struct fg_gen4_dt_props {
+	bool	shutdown_delay_enable;
 	bool	force_load_profile;
 	bool	hold_soc_while_full;
 	bool	linearize_soc;
@@ -661,6 +722,8 @@ struct fg_gen3_chip {
 
 struct fg_gen4_chip {
 	struct fg_dev		fg;
+	struct work_struct	vbat_sync_work;
+	bool			cold_thermal_support;
 	struct fg_gen4_dt_props	dt;
 	struct iio_dev		*indio_dev;
 	struct iio_chan_spec	*iio_chan;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #define pr_fmt(fmt) "QCOM-BATT: %s: " fmt, __func__
@@ -1423,6 +1424,16 @@ static int usb_icl_vote_callback(struct votable *votable, void *data,
 			dc_present = pval.intval;
 		}
 
+		rc = chip->chg_param->iio_read(chip->dev,
+				PSY_IIO_SMB_EN_REASON, &pval.intval);
+		if (rc < 0)
+			return rc;
+		if (pval.intval == QTI_POWER_SUPPLY_CP_WIRELESS) {
+			if (chip->cp_ilim_votable)
+				vote(chip->cp_ilim_votable, ICL_CHANGE_VOTER, false, 0);
+			return 0;
+		}
+
 		/* Don't configure ILIM if DC is present */
 		if (!dc_present)
 			cp_configure_ilim(chip, ICL_CHANGE_VOTER, icl_ua);
@@ -2226,12 +2237,13 @@ void qcom_batt_deinit(void)
 	if (chip == NULL)
 		return;
 
+	power_supply_unreg_notifier(&chip->nb);
+
 	cancel_delayed_work_sync(&chip->status_change_work);
 	cancel_work_sync(&chip->pl_taper_work);
 	cancel_work_sync(&chip->pl_disable_forever_work);
 	cancel_delayed_work_sync(&chip->fcc_stepper_work);
 
-	power_supply_unreg_notifier(&chip->nb);
 	destroy_votable(chip->pl_enable_votable_indirect);
 	destroy_votable(chip->pl_awake_votable);
 	destroy_votable(chip->pl_disable_votable);

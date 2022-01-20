@@ -133,6 +133,15 @@ struct smb5_iio_prop_channels {
 			IIO_ACTIVITY, BIT(IIO_CHAN_INFO_PROCESSED))	\
 
 static const struct smb5_iio_prop_channels smb5_chans_pmic[] = {
+	SMB5_CHAN_COUNT("battery_cycle_count", CYCLE_COUNT)
+	SMB5_CHAN_INDEX("battery_dynamic_fv_enabled", DYNAMIC_FV_ENABLED)
+	SMB5_CHAN_INDEX("battery_liquid_detection", LIQUID_DETECTION)
+	SMB5_CHAN_INDEX("battery_capacity_level", CAPACITY_LEVEL)
+	SMB5_CHAN_INDEX("battery_dc_thermal_levels", DC_THERMAL_LEVELS)
+	SMB5_CHAN_INDEX("usb_type_recheck", TYPE_RECHECK)
+	SMB5_CHAN_INDEX("usb_pd_authentication", PD_AUTHENTICATION)
+	SMB5_CHAN_INDEX("usb_quick_charge_type", QUICK_CHARGE_TYPE)
+	SMB5_CHAN_INDEX("usb_hvdcp3_type", HVDCP3_TYPE)
 	SMB5_CHAN_CUR("usb_pd_current_max", PD_CURRENT_MAX)
 	SMB5_CHAN_INDEX("usb_typec_mode", TYPEC_MODE)
 	SMB5_CHAN_INDEX("usb_typec_power_role", TYPEC_POWER_ROLE)

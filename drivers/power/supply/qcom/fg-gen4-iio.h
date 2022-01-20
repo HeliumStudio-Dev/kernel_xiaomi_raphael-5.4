@@ -103,6 +103,8 @@ static const struct fg_gen4_iio_prop_channels fg_gen4_iio_psy_channels[] = {
 	FG_GEN4_CHAN_POW("power_avg", PSY_IIO_POWER_AVG)
 	FG_GEN4_CHAN_POW("power_now", PSY_IIO_POWER_NOW)
 	FG_GEN4_CHAN_CUR("calibrate", PSY_IIO_CALIBRATE)
+	FG_GEN4_CHAN_INDEX("shutdown_delay", PSY_IIO_SHUTDOWN_DELAY)
+	FG_GEN4_CHAN_INDEX("cold_thermal_level", PSY_IIO_COLD_THERMAL_LEVEL)
 };
 
 enum fg_gen4_ext_iio_channels {
@@ -110,12 +112,14 @@ enum fg_gen4_ext_iio_channels {
 	FG_GEN4_CHARGE_DONE,
 	FG_GEN4_PARALLEL_CHARGING_ENABLED,
 	FG_GEN4_RECHARGE_SOC,
+	FG_GEN4_INPUT_SUSPEND,
 };
 
 static const char * const fg_gen4_ext_iio_chan_name[] = {
 	[FG_GEN4_QNOVO_ENABLE]			= "qnovo_enable",
 	[FG_GEN4_CHARGE_DONE]			= "charge_done",
 	[FG_GEN4_PARALLEL_CHARGING_ENABLED]		= "cp_charging_enabled",
+	[FG_GEN4_INPUT_SUSPEND]			= "input_suspend",
 	[FG_GEN4_RECHARGE_SOC]			= "recharge_soc",
 };
 

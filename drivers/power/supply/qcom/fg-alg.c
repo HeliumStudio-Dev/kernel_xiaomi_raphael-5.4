@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #define pr_fmt(fmt)	"ALG: %s: " fmt, __func__
@@ -271,6 +272,29 @@ int get_cycle_counts(struct cycle_counter *counter, const char **buf)
 	counter->str_buf[len] = '\0';
 	*buf = counter->str_buf;
 	return 0;
+}
+
+/**
+ * set_cycle_count -
+ * @counter: Cycle counter object
+ * @count: The cycle count value to be set
+ *
+ * Set the cycle count for all buckets.
+ */
+int set_cycle_count(struct cycle_counter *counter, u16 count)
+{
+	int rc = 0, id;
+
+	mutex_lock(&counter->lock);
+	for (id = 0; id < BUCKET_COUNT; id++) {
+		rc = counter->store_count(counter->data, &count, id, sizeof(count));
+		if (rc < 0)
+			break;
+		counter->count[id] = count;
+	}
+	mutex_unlock(&counter->lock);
+
+	return rc;
 }
 
 /**

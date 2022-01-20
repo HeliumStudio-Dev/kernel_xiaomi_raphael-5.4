@@ -21,6 +21,10 @@ And public attribution of xiaomi platforms(like F1 and so and)
 };
 
 &pm8150b_fg {
+	io-channels = <&pm8150b_charger PSY_IIO_CHARGE_DONE>,
+		      <&pm8150b_charger PSY_IIO_RECHARGE_SOC>,
+		      <&pm8150b_charger PSY_IIO_INPUT_SUSPEND>;
+	io-channel-names = "charge_done", "recharge_soc", "input_suspend";
 	qcom,battery-data = <&mtp_batterydata>;
 	qcom,rapid-soc-dec-en;
 	qcom,soc-scale-mode-en;
