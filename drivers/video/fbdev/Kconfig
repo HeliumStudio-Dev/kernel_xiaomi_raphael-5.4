@@ -2233,6 +2233,12 @@ config FB_SIMPLE
 	  Configuration re: surface address, size, and format must be provided
 	  through device tree, or plain old platform data.
 
+config FB_EARLY
+	bool "Framebuffer earlycon"
+	depends on SERIAL_EARLYCON
+	select FONT_SUPPORT
+	select ARCH_USE_MEMREMAP_PROT
+
 config FB_SSD1307
 	tristate "Solomon SSD1307 framebuffer support"
 	depends on FB && I2C
