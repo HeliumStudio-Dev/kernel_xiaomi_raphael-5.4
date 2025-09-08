@@ -278,6 +278,8 @@ struct hfi_buffer_info {
 #define  HFI_PROPERTY_PARAM_VDEC_COLOUR_SPACE				\
 	(HFI_PROPERTY_PARAM_VDEC_COMMON_START + 0x00A)
 
+#define  HFI_PROPERTY_PARAM_VDEC_DPB_COUNTS_SM8150				\
+	(HFI_PROPERTY_PARAM_VDEC_COMMON_START + 0x00B)
 
 #define HFI_PROPERTY_CONFIG_VDEC_COMMON_START				\
 	(HFI_DOMAIN_BASE_VDEC + HFI_ARCH_COMMON_OFFSET + 0x4000)
@@ -594,6 +596,12 @@ struct hfi_nal_stream_format_select {
 struct hfi_profile_level {
 	u32 profile;
 	u32 level;
+};
+
+struct hfi_dpb_counts_sm8150 {
+	u32 max_dpb_count;
+	u32 max_ref_frames;
+	u32 max_dec_buffering;
 };
 
 struct hfi_dpb_counts {
