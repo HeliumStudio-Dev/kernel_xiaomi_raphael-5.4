@@ -615,11 +615,18 @@ struct msm_vidc_cb_event {
 	u32 profile;
 	u32 level;
 	u32 entropy_mode;
+#ifdef CONFIG_SM8150_SUPPORT
+	u32 max_dpb_count;
+	u32 max_ref_frames;
+	u32 max_dec_buffering;
+	u32 fw_min_cnt;
+#else
 	u32 max_dpb_count;
 	u32 max_ref_frames;
 	u32 max_dec_buffering;
 	u32 max_reorder_frames;
 	u32 fw_min_cnt;
+#endif
 };
 
 struct msm_vidc_cb_data_done {
