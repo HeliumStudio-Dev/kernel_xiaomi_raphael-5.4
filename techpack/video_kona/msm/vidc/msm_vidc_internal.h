@@ -13,8 +13,6 @@
 #include <linux/completion.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
-#include <linux/msm-bus.h>
-#include <linux/msm-bus-board.h>
 #include <linux/kref.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-device.h>
@@ -23,6 +21,7 @@
 #include <media/v4l2-ctrls.h>
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-v4l2.h>
+#include <linux/interconnect.h>
 #include "msm_vidc.h"
 #include "vidc_kona/media/msm_media_info.h"
 #include "vidc_hfi_api.h"
