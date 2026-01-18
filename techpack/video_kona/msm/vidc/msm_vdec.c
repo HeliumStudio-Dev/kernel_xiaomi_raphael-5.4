@@ -4,7 +4,7 @@
  */
 
 #include <linux/slab.h>
-#include <soc/qcom/scm.h>
+#include <linux/qcom_scm.h>
 #include "msm_vdec.h"
 #include "msm_vidc_internal.h"
 #include "msm_vidc_common.h"
