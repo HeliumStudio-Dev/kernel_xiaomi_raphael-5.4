@@ -1306,7 +1306,7 @@ int msm_vidc_decide_work_route_iris1(struct msm_vidc_inst *inst)
 		fps = inst->clk_data.frame_rate >> 16;
 		mbps = NUM_MBS_PER_SEC(output_height, output_width, fps);
 		if (slice_mode ==
-			V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES ||
+			V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES ||
 			(inst->rc_type == V4L2_MPEG_VIDEO_BITRATE_MODE_CBR &&
 			mbps <= CBR_MB_LIMIT) ||
 			(inst->rc_type ==
@@ -1370,7 +1370,7 @@ int msm_vidc_decide_work_route_iris2(struct msm_vidc_inst *inst)
 		height = f->fmt.pix_mp.height;
 		width = f->fmt.pix_mp.width;
 
-		if (slice_mode == V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES ||
+		if (slice_mode == V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES ||
 			codec == V4L2_PIX_FMT_VP8 || is_legacy_cbr) {
 			pdata.video_work_route = 1;
 		}

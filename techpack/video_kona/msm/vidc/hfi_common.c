@@ -3,7 +3,7 @@
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
-#include <asm/dma-iommu.h>
+#include <linux/dma-iommu.h>
 #include <asm/memory.h>
 #include <linux/clk/qcom.h>
 #include <linux/coresight-stm.h>

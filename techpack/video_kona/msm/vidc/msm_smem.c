@@ -3,7 +3,7 @@
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
-#include <asm/dma-iommu.h>
+#include <linux/dma-iommu.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-direction.h>
 #include <linux/iommu.h>
