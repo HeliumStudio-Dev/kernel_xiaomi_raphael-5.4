@@ -132,7 +132,8 @@ int msm_v4l2_reqbufs(struct file *file, void *fh,
 int msm_v4l2_qbuf(struct file *file, void *fh,
 				struct v4l2_buffer *b)
 {
-	return msm_vidc_qbuf(get_vidc_inst(file, fh), b);
+	struct video_device *vdev = video_devdata(file);
+	return msm_vidc_qbuf(get_vidc_inst(file, fh), vdev->v4l2_dev->mdev, b);
 }
 
 int msm_v4l2_dqbuf(struct file *file, void *fh,
