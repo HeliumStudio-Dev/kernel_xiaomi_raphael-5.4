@@ -223,11 +223,10 @@ static long msm_v4l2_default(struct file *file, void *fh,
 	return msm_vidc_private((void *)vidc_inst, cmd, arg);
 }
 
-
 const struct v4l2_ioctl_ops msm_v4l2_ioctl_ops = {
 	.vidioc_querycap = msm_v4l2_querycap,
-	.vidioc_enum_fmt_vid_cap_mplane = msm_v4l2_enum_fmt,
-	.vidioc_enum_fmt_vid_out_mplane = msm_v4l2_enum_fmt,
+	.vidioc_enum_fmt_vid_cap = msm_v4l2_enum_fmt,
+	.vidioc_enum_fmt_vid_out = msm_v4l2_enum_fmt,
 	.vidioc_s_fmt_vid_cap_mplane = msm_v4l2_s_fmt,
 	.vidioc_s_fmt_vid_out_mplane = msm_v4l2_s_fmt,
 	.vidioc_g_fmt_vid_cap_mplane = msm_v4l2_g_fmt,
