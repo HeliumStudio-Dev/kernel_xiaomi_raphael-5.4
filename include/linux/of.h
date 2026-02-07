@@ -1295,6 +1295,34 @@ static inline int of_get_available_child_count(const struct device_node *np)
 }
 
 /**
+ * of_fdt_get_ddrrank - Return the rank of ddr on the current device
+ *
+ * On match, returns a non-zero positive value which matches the ddr rank.
+ * Otherwise returns -ENOENT.
+ */
+static inline int of_fdt_get_ddrrank(int channel)
+{
+	int ret;
+	u32 ddr_rank;
+	struct device_node *ddr_rank_node;
+	/* Single space reserved for channel(0-9) */
+	char pname[] = "ddr_device_rank_ch ";
+
+	ddr_rank_node = of_find_node_by_path("/memory");
+	if (!ddr_rank_node)
+		return -ENOENT;
+
+	snprintf(pname, sizeof(pname), "ddr_device_rank_ch%d", channel);
+
+	ret = of_property_read_u32(ddr_rank_node, pname, &ddr_rank);
+	of_node_put(ddr_rank_node);
+	if (ret < 0)
+		return -ENOENT;
+
+	return ddr_rank;
+}
+
+/**
  * of_fdt_get_ddrtype - Return the type of ddr (4/5) on the current device
  *
  * On match, returns a non-zero positive value which matches the ddr type.
