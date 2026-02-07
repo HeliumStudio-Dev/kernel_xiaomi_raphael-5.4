@@ -365,7 +365,8 @@ int msm_vidc_release_buffer(void *instance, int type, unsigned int index)
 }
 EXPORT_SYMBOL(msm_vidc_release_buffer);
 
-int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
+int msm_vidc_qbuf(void *instance, struct media_device *mdev,
+		struct v4l2_buffer *b)
 {
 	struct msm_vidc_inst *inst = instance;
 	int rc = 0;
@@ -434,7 +435,7 @@ int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 		&& b->type == INPUT_MPLANE)
 		b->flags |= V4L2_BUF_FLAG_PERF_MODE;
 
-	rc = vb2_qbuf(&q->vb2_bufq, b);
+	rc = vb2_qbuf(&q->vb2_bufq, mdev, b);
 	if (rc)
 		s_vpr_e(inst->sid, "Failed to qbuf, %d\n", rc);
 unlock:
