@@ -402,12 +402,12 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.name = "Slice Mode",
 		.type = V4L2_CTRL_TYPE_MENU,
 		.minimum = V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE,
-		.maximum = V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES,
+		.maximum = V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES,
 		.default_value = V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE,
 		.menu_skip_mask = ~(
 		(1 << V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE) |
-		(1 << V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_MB) |
-		(1 << V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES)
+		(1 << V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_MB) |
+		(1 << V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES)
 		),
 	},
 	{
@@ -3203,10 +3203,10 @@ int msm_venc_set_slice_control_mode(struct msm_vidc_inst *inst)
 		goto set_and_exit;
 
 	ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE);
-	if (ctrl->val == V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_MB) {
+	if (ctrl->val == V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_MB) {
 		temp = V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_MB;
 		slice_mode = HFI_MULTI_SLICE_BY_MB_COUNT;
-	} else if (ctrl->val == V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES) {
+	} else if (ctrl->val == V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES) {
 		temp = V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_BYTES;
 		slice_mode = HFI_MULTI_SLICE_BY_BYTE_COUNT;
 	} else {
