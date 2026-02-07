@@ -3586,12 +3586,12 @@ void __disable_unprepare_clks(struct venus_hfi_device *device)
 	venus_hfi_for_each_clock_reverse(device, cl) {
 		d_vpr_h("Clock: %s disable and unprepare\n",
 				cl->name);
-		rc = clk_set_flags(cl->clk, CLKFLAG_NORETAIN_PERIPH);
+		rc = qcom_clk_set_flags(cl->clk, CLKFLAG_NORETAIN_PERIPH);
 		if (rc) {
 			d_vpr_e("Failed set flag NORETAIN_PERIPH %s\n",
 					cl->name);
 		}
-		rc = clk_set_flags(cl->clk, CLKFLAG_NORETAIN_MEM);
+		rc = qcom_clk_set_flags(cl->clk, CLKFLAG_NORETAIN_MEM);
 		if (rc) {
 			d_vpr_e("Failed set flag NORETAIN_MEM %s\n",
 					cl->name);
@@ -3663,12 +3663,12 @@ static inline int __prepare_enable_clks(struct venus_hfi_device *device,
 			__set_clk_rate(device, cl,
 					clk_round_rate(cl->clk, 0), sid);
 
-		rc = clk_set_flags(cl->clk, CLKFLAG_RETAIN_PERIPH);
+		rc = qcom_clk_set_flags(cl->clk, CLKFLAG_RETAIN_PERIPH);
 		if (rc) {
 			s_vpr_e(sid, "Failed set flag RETAIN_PERIPH %s\n",
 					cl->name);
 		}
-		rc = clk_set_flags(cl->clk, CLKFLAG_RETAIN_MEM);
+		rc = qcom_clk_set_flags(cl->clk, CLKFLAG_RETAIN_MEM);
 		if (rc) {
 			s_vpr_e(sid, "Failed set flag RETAIN_MEM %s\n",
 					cl->name);
