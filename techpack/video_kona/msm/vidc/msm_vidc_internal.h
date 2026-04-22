@@ -23,7 +23,11 @@
 #include <media/videobuf2-v4l2.h>
 #include <linux/interconnect.h>
 #include "msm_vidc.h"
+#ifdef CONFIG_VIDC_NV12_ALIGN
+#include "vidc_kona/media/msm_media_info_sm8150.h"
+#else
 #include "vidc_kona/media/msm_media_info.h"
+#endif
 #include "vidc_hfi_api.h"
 #include "vidc_hfi_helper.h"
 
