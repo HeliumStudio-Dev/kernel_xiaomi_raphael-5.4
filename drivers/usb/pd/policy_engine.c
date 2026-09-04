@@ -185,7 +185,7 @@ enum iio_psy_property {
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MIN,
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MAX,
 	PSY_IIO_PROP_REAL_TYPE,
-	POWER_SUPPLY_PROP_TYPEC_MODE,
+	PSY_IIO_PROP_TYPEC_MODE,
 	POWER_SUPPLY_PROP_PE_START,
 	POWER_SUPPLY_IIO_PROP_MAX,
 };
@@ -3915,7 +3915,7 @@ static void psy_changed_notifier_work(struct work_struct *w)
 	int usb_extcon_state;
 
 	ret = usbpd_get_psy_iio_property(pd,
-			POWER_SUPPLY_PROP_TYPEC_MODE, &val);
+			PSY_IIO_PROP_TYPEC_MODE, &val);
 	if (ret) {
 		usbpd_err(&pd->dev, "Unable to read USB TYPEC_MODE: %d\n", ret);
 		return;
