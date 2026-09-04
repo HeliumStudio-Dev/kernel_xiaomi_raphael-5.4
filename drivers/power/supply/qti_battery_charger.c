@@ -293,6 +293,7 @@ static const int usb_prop_map[USB_PROP_MAX] = {
 	[USB_INPUT_CURR_LIMIT]	= POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	[USB_ADAP_TYPE]		= POWER_SUPPLY_PROP_USB_TYPE,
 	[USB_TEMP]		= POWER_SUPPLY_PROP_TEMP,
+	[USB_REAL_TYPE]		= POWER_SUPPLY_PROP_REAL_TYPE,
 	[USB_SCOPE]		= POWER_SUPPLY_PROP_SCOPE,
 };
 
@@ -953,6 +954,11 @@ static int usb_psy_get_prop(struct power_supply *psy,
 	if (rc < 0)
 		return rc;
 
+	if (prop == POWER_SUPPLY_PROP_REAL_TYPE) {
+		pval->strval = get_usb_type_name(pst->prop[prop_id]);
+		return 0;
+	}
+
 	pval->intval = pst->prop[prop_id];
 	if (prop == POWER_SUPPLY_PROP_TEMP)
 		pval->intval = DIV_ROUND_CLOSEST((int)pval->intval, 10);
@@ -1004,6 +1010,7 @@ static enum power_supply_property usb_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	POWER_SUPPLY_PROP_USB_TYPE,
+	POWER_SUPPLY_PROP_REAL_TYPE,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SCOPE,
 };

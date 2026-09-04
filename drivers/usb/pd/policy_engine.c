@@ -184,7 +184,7 @@ enum iio_psy_property {
 	POWER_SUPPLY_PROP_PR_SWAP,
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MIN,
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MAX,
-	POWER_SUPPLY_PROP_REAL_TYPE,
+	PSY_IIO_PROP_REAL_TYPE,
 	POWER_SUPPLY_PROP_TYPEC_MODE,
 	POWER_SUPPLY_PROP_PE_START,
 	POWER_SUPPLY_IIO_PROP_MAX,
@@ -2790,7 +2790,7 @@ static void enter_state_snk_startup(struct usbpd *pd)
 		pd->current_dr = DR_UFP;
 
 		ret = usbpd_get_psy_iio_property(pd,
-				POWER_SUPPLY_PROP_REAL_TYPE, &val);
+				PSY_IIO_PROP_REAL_TYPE, &val);
 		if (!ret) {
 			usbpd_dbg(&pd->dev, "type:%d\n", val.intval);
 			if (val.intval == POWER_SUPPLY_TYPE_USB ||
@@ -3935,7 +3935,7 @@ static void psy_changed_notifier_work(struct work_struct *w)
 	if (!val.intval && !pd->pd_connected &&
 			typec_mode >= QTI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT) {
 		ret = usbpd_get_psy_iio_property(pd,
-				POWER_SUPPLY_PROP_REAL_TYPE, &val);
+				PSY_IIO_PROP_REAL_TYPE, &val);
 		if (ret) {
 			usbpd_err(&pd->dev, "Unable to read USB TYPE: %d\n",
 					ret);
@@ -3990,7 +3990,7 @@ static void psy_changed_notifier_work(struct work_struct *w)
 		usb_extcon_state = extcon_get_state(pd->extcon, EXTCON_USB);
 
 		if (usb_extcon_state == 0) {
-			ret = usbpd_get_psy_iio_property(pd, POWER_SUPPLY_PROP_REAL_TYPE,
+			ret = usbpd_get_psy_iio_property(pd, PSY_IIO_PROP_REAL_TYPE,
 								&val);
 			if (ret) {
 				usbpd_err(&pd->dev, "Unable to read USB PROP_REAL_TYPE: %d\n",
