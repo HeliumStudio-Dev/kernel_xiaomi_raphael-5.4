@@ -4611,14 +4611,53 @@ static int fg_psy_get_property(struct power_supply *psy,
 			       enum power_supply_property psp,
 			       union power_supply_propval *pval)
 {
-	if (psp == POWER_SUPPLY_PROP_TYPE)
-		pval->intval = POWER_SUPPLY_TYPE_MAINS;
+	struct fg_gen4_chip *chip = power_supply_get_drvdata(psy);
+	struct fg_dev *fg = &chip->fg;
+	int64_t temp;
+	int rc = 0;
 
-	return 0;
+	switch (psp) {
+	case POWER_SUPPLY_PROP_TYPE:
+		pval->intval = POWER_SUPPLY_TYPE_MAINS;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		rc = fg_gen4_get_learned_capacity(chip, &temp);
+		if (!rc)
+			pval->intval = (int)temp;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+		if (fg->bp.nom_cap_uah != -EINVAL) {
+			pval->intval = fg->bp.nom_cap_uah * 1000;
+		} else {
+			rc = fg_gen4_get_nominal_capacity(chip, &temp);
+			if (!rc)
+				pval->intval = (int)temp;
+		}
+		break;
+	case POWER_SUPPLY_PROP_RESISTANCE:
+		rc = fg_get_battery_resistance(fg, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		rc = get_cycle_count(chip->counter, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_SOH:
+		pval->intval = chip->soh;
+		break;
+	default:
+		rc = -EINVAL;
+		break;
+	}
+
+	return rc;
 }
 
 static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_TYPE,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_RESISTANCE,
+	POWER_SUPPLY_PROP_CYCLE_COUNT,
+	POWER_SUPPLY_PROP_SOH,
 };
 
 static const struct power_supply_desc fg_psy_desc = {

@@ -1181,6 +1181,42 @@ int smb5_set_prop_comp_clamp_level(struct smb_charger *chg,
 /************************
  * USB PSY REGISTRATION *
  ************************/
+static const char *smb5_get_usb_type_name(int type)
+{
+	switch (type) {
+	case POWER_SUPPLY_TYPE_USB:
+		return "USB";
+	case POWER_SUPPLY_TYPE_USB_DCP:
+		return "USB_DCP";
+	case POWER_SUPPLY_TYPE_USB_CDP:
+		return "USB_CDP";
+	case POWER_SUPPLY_TYPE_USB_ACA:
+		return "USB_ACA";
+	case POWER_SUPPLY_TYPE_USB_TYPE_C:
+		return "USB_C";
+	case POWER_SUPPLY_TYPE_USB_PD:
+		return "USB_PD";
+	case POWER_SUPPLY_TYPE_USB_PD_DRP:
+		return "USB_PD_DRP";
+	case POWER_SUPPLY_TYPE_APPLE_BRICK_ID:
+		return "BrickID";
+	case POWER_SUPPLY_TYPE_USB_HVDCP:
+	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP:
+		return "USB_HVDCP";
+	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
+	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3:
+		return "USB_HVDCP_3";
+	case POWER_SUPPLY_TYPE_USB_HVDCP_3P5:
+	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5:
+		return "USB_HVDCP_3P5";
+	case POWER_SUPPLY_TYPE_USB_FLOAT:
+	case QTI_POWER_SUPPLY_TYPE_USB_FLOAT:
+		return "USB_FLOAT";
+	default:
+		return "Unknown";
+	}
+}
+
 static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
@@ -1196,6 +1232,8 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_SCOPE,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	POWER_SUPPLY_PROP_POWER_NOW,
+	POWER_SUPPLY_PROP_REAL_TYPE,
+	POWER_SUPPLY_PROP_TYPEC_MODE,
 };
 
 static int smb5_usb_get_prop(struct power_supply *psy,
@@ -1258,6 +1296,15 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 			val->intval = chg->qc3p5_detected_mw;
 		else
 			rc = -ENODATA;
+		break;
+	case POWER_SUPPLY_PROP_REAL_TYPE:
+		val->strval = smb5_get_usb_type_name(chg->real_charger_type);
+		break;
+	case POWER_SUPPLY_PROP_TYPEC_MODE:
+		if (chg->connector_type == QTI_POWER_SUPPLY_CONNECTOR_MICRO_USB)
+			val->intval = QTI_POWER_SUPPLY_TYPEC_NONE;
+		else
+			val->intval = chg->typec_mode;
 		break;
 	default:
 		pr_err("get prop %d is not supported in usb\n", psp);
