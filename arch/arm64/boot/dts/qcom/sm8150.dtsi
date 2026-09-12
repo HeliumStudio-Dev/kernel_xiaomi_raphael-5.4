@@ -40,7 +40,7 @@
 	#size-cells = <2>;
 
 	chosen: chosen {
-		bootargs = "rcupdate.rcu_expedited=1 rcu_nocbs=0-7 cgroup.memory=nokmem,nosocket kpti=0 ssbd=force-off";
+		bootargs = "rcupdate.rcu_expedited=1 rcu_nocbs=0-7 cgroup.memory=nokmem,nosocket kpti=0 ssbd=force-off earlycon=simplefb,0x9c000000,1080,2340 panic=10";
 	};
 
 	memory { device_type = "memory"; reg = <0 0 0 0>; };
