@@ -206,7 +206,6 @@ static u32 programmable_fetch_get_num_lines(
 {
 	struct sde_encoder_phys *phys_enc = &vid_enc->base;
 	struct sde_mdss_cfg *m;
-
 	u32 needed_prefill_lines, needed_vfp_lines, actual_vfp_lines;
 	const u32 fixed_prefill_fps = DEFAULT_FPS;
 	u32 default_prefill_lines =
@@ -220,17 +219,31 @@ static u32 programmable_fetch_get_num_lines(
 	max_fps = sde_encoder_get_dfps_maxfps(phys_enc->parent);
 	vrefresh = (max_fps > timing->vrefresh) ? max_fps : timing->vrefresh;
 
-	/* minimum prefill lines are defined based on 60fps */
-	needed_prefill_lines = (vrefresh > fixed_prefill_fps) ?
-		((default_prefill_lines * vrefresh) /
-			fixed_prefill_fps) : default_prefill_lines;
+	/* if minimum prefill lines are less than 35, use default
+	*  for older targets to prevent intf errors same as downstream
+	*  kernels.
+	*/
+	if (m->perf.min_prefill_lines < 35) {
+		needed_prefill_lines = default_prefill_lines;
+	} else {
+		/* minimum prefill lines are defined based on 60fps */
+		needed_prefill_lines = (timing->vrefresh > fixed_prefill_fps) ?
+			((default_prefill_lines * timing->vrefresh) /
+				fixed_prefill_fps) : default_prefill_lines;
+	}
 	needed_vfp_lines = needed_prefill_lines - start_of_frame_lines;
 
 	/* Fetch must be outside active lines, otherwise undefined. */
 	if (start_of_frame_lines >= needed_prefill_lines) {
-		SDE_DEBUG_VIDENC(vid_enc,
-				"prog fetch always enabled case\n");
-		actual_vfp_lines = (m->delay_prg_fetch_start) ? 2 : 1;
+		if (m->perf.min_prefill_lines < 35) {
+			SDE_DEBUG_VIDENC(vid_enc,
+					"prog fetch is not needed, large vbp+vsw\n");
+			actual_vfp_lines = 0;
+		} else {
+			SDE_DEBUG_VIDENC(vid_enc,
+					"prog fetch always enabled case\n");
+			actual_vfp_lines = (m->delay_prg_fetch_start) ? 2 : 1;
+		}
 	} else if (v_front_porch < needed_vfp_lines) {
 		/* Warn fetch needed, but not enough porch in panel config */
 		pr_warn_once
