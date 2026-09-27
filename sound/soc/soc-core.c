@@ -431,8 +431,18 @@ static void snd_soc_flush_all_delayed_work(struct snd_soc_card *card)
 {
 	struct snd_soc_pcm_runtime *rtd;
 
-	for_each_card_rtds(card, rtd)
-		flush_delayed_work(&rtd->delayed_work);
+	/*
+	 * The work is only initialised when a PCM or compress device was
+	 * actually created for a link (soc_new_pcm(),
+	 * snd_soc_dai_compress_new()). A link without one, or whose device
+	 * creation failed, leaves it zeroed, and flushing a zeroed work trips
+	 * the WARN in __flush_work() on every suspend. Nothing can be queued
+	 * on it, so skip it.
+	 */
+	for_each_card_rtds(card, rtd) {
+		if (rtd->delayed_work.work.func)
+			flush_delayed_work(&rtd->delayed_work);
+	}
 }
 
 #ifdef CONFIG_PM_SLEEP
