@@ -522,8 +522,11 @@ static int really_probe(struct device *dev, struct device_driver *drv)
 	}
 
 	ret = device_links_check_suppliers(dev);
-	if (ret == -EPROBE_DEFER)
+	if (ret == -EPROBE_DEFER) {
+		pr_emerg("PROBE-LINK DEFER: %s <- %d\n",
+			 dev_name(dev), ret);
 		driver_deferred_probe_add_trigger(dev, local_trigger_count);
+	}
 	if (ret)
 		return ret;
 
@@ -562,6 +565,14 @@ re_probe:
 		if (ret)
 			goto probe_failed;
 	}
+
+	pr_emerg("CALL-PROBE: dev=%s name=\"%s\" "
+		 "bus=%s bus_probe=%ps drv_probe=%ps\n",
+		 dev_name(dev),
+		 drv->name ? drv->name : "<NULL>",
+		 drv->bus ? drv->bus->name : "<NULL>",
+		 dev->bus ? dev->bus->probe : NULL,
+		 drv->probe);
 
 	if (dev->bus->probe) {
 		ret = dev->bus->probe(dev);
@@ -628,6 +639,11 @@ dev_groups_failed:
 	else if (drv->remove)
 		drv->remove(dev);
 probe_failed:
+	pr_emerg("CALL-PROBE FAIL: dev=%s drv=\"%s\" ret=%d\n",
+		 dev_name(dev),
+		 drv->name ? drv->name : "<NULL>",
+		 ret);
+	msleep(3000);
 	if (dev->bus)
 		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
 					     BUS_NOTIFY_DRIVER_NOT_BOUND, dev);

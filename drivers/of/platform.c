@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/amba/bus.h>
 #include <linux/device.h>
+#include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 #include <linux/of_address.h>
@@ -190,6 +191,9 @@ static struct platform_device *of_platform_device_create_pdata(
 		platform_device_put(dev);
 		goto err_clear_flag;
 	}
+
+	pr_err("OF-POPULATE: %pOF -> create platform device\n", np);
+	msleep(1000);
 
 	return dev;
 

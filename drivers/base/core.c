@@ -889,6 +889,9 @@ int device_links_check_suppliers(struct device *dev)
 {
 	struct device_link *link;
 	int ret = 0;
+	struct device *sup_dev;
+
+	pr_emerg("DEVLINK: check suppliers for %s\n", dev_name(dev));
 
 	/*
 	 * Device waiting for supplier to become available is not allowed to
@@ -897,6 +900,11 @@ int device_links_check_suppliers(struct device *dev)
 	mutex_lock(&wfs_lock);
 	if (!list_empty(&dev->links.needs_suppliers) &&
 	    dev->links.need_for_probe) {
+		sup_dev = list_first_entry(&wait_for_suppliers,
+					  struct device_link,
+					  c_node)->supplier;
+		pr_emerg("DEVLINK: wait for supplier %s\n", dev_name(sup_dev));
+		msleep(3000);
 		mutex_unlock(&wfs_lock);
 		return -EPROBE_DEFER;
 	}
@@ -911,6 +919,8 @@ int device_links_check_suppliers(struct device *dev)
 		if (link->status != DL_STATE_AVAILABLE &&
 		    !(link->flags & DL_FLAG_SYNC_STATE_ONLY)) {
 			device_links_missing_supplier(dev);
+			pr_emerg("DEVLINK: supplier %s not ready\n", dev_name(link->supplier));
+			msleep(3000);
 			ret = -EPROBE_DEFER;
 			break;
 		}
