@@ -1870,9 +1870,9 @@ static const struct v4l2_ctrl_ops msm_vidc_ctrl_ops = {
 	.g_volatile_ctrl = msm_vidc_op_g_volatile_ctrl,
 };
 
-static void batch_timer_callback(struct timer_list *t)
+static void batch_timer_callback(unsigned long data)
 {
-	struct msm_vidc_inst *inst = from_timer(inst, t, batch_timer);
+	struct msm_vidc_inst *inst = (struct msm_vidc_inst *)data;
 
 	if (!inst->batch.enable)
 		return;
@@ -2017,8 +2017,8 @@ void *msm_vidc_open(int core_id, int session_type)
 	}
 
 	INIT_WORK(&inst->batch_work, msm_vidc_batch_handler);
-	timer_setup(&inst->batch_timer,
-				batch_timer_callback, 0);
+	setup_timer(&inst->batch_timer,
+				batch_timer_callback, (unsigned long)inst);
 
 	return inst;
 fail_init:
