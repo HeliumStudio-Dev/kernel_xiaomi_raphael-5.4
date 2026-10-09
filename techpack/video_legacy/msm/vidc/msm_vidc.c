@@ -608,13 +608,9 @@ int msm_vidc_dqbuf(void *instance, struct v4l2_buffer *b)
 	tag_data.index = b->index;
 	tag_data.type = b->type;
 
-	if (msm_comm_fetch_tags(inst, &tag_data)) {
-		b->m.planes[0].reserved[5] = tag_data.input_tag;
-		b->m.planes[0].reserved[6] = tag_data.output_tag;
-	} else {
-		b->m.planes[0].reserved[5] = 0;
-		b->m.planes[0].reserved[6] = 0;
-	}
+	msm_comm_fetch_tags(inst, &tag_data);
+	b->m.planes[0].reserved[5] = tag_data.input_tag;
+	b->m.planes[0].reserved[6] = tag_data.output_tag;
 
 	return rc;
 }
