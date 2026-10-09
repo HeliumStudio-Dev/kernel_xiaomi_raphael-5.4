@@ -189,11 +189,6 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 	static const char * const mpeg_video_bitrate_mode[] = {
 		"Variable Bitrate",
 		"Constant Bitrate",
-		"Maximum Bitrate",
-		"RC OFF",
-		"CBR VFR",
-		"MBR VFR",
-		"Constant Quality",
 		NULL
 	};
 	static const char * const mpeg_stream_type[] = {
@@ -301,7 +296,6 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 	static const char * const header_mode[] = {
 		"Separate Buffer",
 		"Joined With 1st Frame",
-		"Joined with I Frame",
 		NULL,
 	};
 	static const char * const multi_slice[] = {
