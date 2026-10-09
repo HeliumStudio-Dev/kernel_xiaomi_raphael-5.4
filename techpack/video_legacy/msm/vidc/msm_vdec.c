@@ -12,6 +12,7 @@
  */
 
 #include <linux/slab.h>
+#include <soc/qcom/scm.h>
 #include "msm_vidc_internal.h"
 #include "msm_vidc_common.h"
 #include "vidc_hfi_api.h"
