@@ -14,6 +14,7 @@
 #ifndef __MSM_VIDC_RESOURCES_H__
 #define __MSM_VIDC_RESOURCES_H__
 
+#include <linux/devfreq.h>
 #include <linux/platform_device.h>
 #include "msm_vidc.h"
 #include <linux/soc/qcom/llcc-qcom.h>
@@ -102,10 +103,12 @@ struct bus_info {
 	int master;
 	int slave;
 	unsigned int range[2];
+	const char *governor;
 	struct device *dev;
+	struct devfreq_dev_profile devfreq_prof;
+	struct devfreq *devfreq;
 	struct msm_bus_client_handle *client;
 	bool is_prfm_gov_used;
-	const char *mode;
 };
 
 struct bus_set {

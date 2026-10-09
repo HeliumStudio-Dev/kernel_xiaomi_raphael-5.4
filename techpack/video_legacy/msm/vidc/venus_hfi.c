@@ -16,6 +16,7 @@
 #include <linux/clk/qcom.h>
 #include <linux/coresight-stm.h>
 #include <linux/delay.h>
+#include <linux/devfreq.h>
 #include <linux/hash.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
@@ -984,24 +985,84 @@ static void __set_threshold_registers(struct venus_hfi_device *device)
 		dprintk(VIDC_ERR, "Failed to restore threshold values\n");
 }
 
-static int __vote_bandwidth(struct bus_info *bus,
-		unsigned long *freq)
+static int __devfreq_target(struct device *devfreq_dev,
+		unsigned long *freq, u32 flags)
 {
 	int rc = 0;
 	uint64_t ab = 0;
+	struct bus_info *bus = NULL, *temp = NULL;
+	struct venus_hfi_device *device = dev_get_drvdata(devfreq_dev);
 
+	venus_hfi_for_each_bus(device, temp) {
+		if (temp->dev == devfreq_dev) {
+			bus = temp;
+			break;
+		}
+	}
+
+	if (!bus) {
+		rc = -EBADHANDLE;
+		goto err_unknown_device;
+	}
+
+	/*
+	 * Clamp for all non zero frequencies. This clamp is necessary to stop
+	 * devfreq driver from spamming - Couldn't update frequency - logs, if
+	 * the scaled ab value is not part of the frequency table.
+	 */
 	if (*freq)
 		*freq = clamp_t(typeof(*freq), *freq, bus->range[0],
 				bus->range[1]);
 
-	/* Bus Driver expects values in Bps */
+	/* we expect governors to provide values in kBps form, convert to Bps */
 	ab = *freq * 1000;
-	dprintk(VIDC_PROF, "Voting bus %s to ab %llu\n", bus->name, ab);
 	rc = msm_bus_scale_update_bw(bus->client, ab, 0);
-	if (rc)
-		dprintk(VIDC_ERR, "Failed voting bus %s to ab %llu, rc=%d\n",
+	if (rc) {
+		dprintk(VIDC_ERR, "Failed voting bus %s to ab %llu\n: %d",
 				bus->name, ab, rc);
+		goto err_unknown_device;
+	}
 
+	dprintk(VIDC_PROF, "Voting bus %s to ab %llu\n", bus->name, ab);
+
+	return 0;
+err_unknown_device:
+	return rc;
+}
+
+static int __devfreq_get_status(struct device *devfreq_dev,
+		struct devfreq_dev_status *stat)
+{
+	int rc = 0;
+	struct bus_info *bus = NULL, *temp = NULL;
+	struct venus_hfi_device *device = dev_get_drvdata(devfreq_dev);
+
+	venus_hfi_for_each_bus(device, temp) {
+		if (temp->dev == devfreq_dev) {
+			bus = temp;
+			break;
+		}
+	}
+
+	if (!bus) {
+		rc = -EBADHANDLE;
+		goto err_unknown_device;
+	}
+
+	*stat = (struct devfreq_dev_status) {
+		.private_data = &device->bus_vote,
+		/*
+		 * Put in dummy place holder values for upstream govs, our
+		 * custom gov only needs .private_data.  We should fill this in
+		 * properly if we can actually measure busy_time accurately
+		 * (which we can't at the moment)
+		 */
+		.total_time = 1,
+		.busy_time = 1,
+		.current_frequency = 0,
+	};
+
+err_unknown_device:
 	return rc;
 }
 
@@ -1009,19 +1070,21 @@ static int __unvote_buses(struct venus_hfi_device *device)
 {
 	int rc = 0;
 	struct bus_info *bus = NULL;
-	unsigned long freq = 0, zero = 0;
 
 	kfree(device->bus_vote.data);
 	device->bus_vote.data = NULL;
 	device->bus_vote.data_count = 0;
 
 	venus_hfi_for_each_bus(device, bus) {
+		unsigned long zero = 0;
+
 		if (!bus->is_prfm_gov_used) {
-			freq = __calc_bw(bus, &device->bus_vote);
-			rc = __vote_bandwidth(bus, &freq);
+			mutex_lock(&bus->devfreq->lock);
+			rc = update_devfreq(bus->devfreq);
+			mutex_unlock(&bus->devfreq->lock);
 		}
 		else
-			rc = __vote_bandwidth(bus, &zero);
+			rc = __devfreq_target(bus->dev, &zero, 0);
 
 		if (rc)
 			goto err_unknown_device;
@@ -1037,7 +1100,6 @@ static int __vote_buses(struct venus_hfi_device *device,
 	int rc = 0;
 	struct bus_info *bus = NULL;
 	struct vidc_bus_vote_data *new_data = NULL;
-	unsigned long freq = 0;
 
 	if (!num_data) {
 		dprintk(VIDC_DBG, "No vote data available\n");
@@ -1060,18 +1122,17 @@ no_data_count:
 	device->bus_vote.data_count = num_data;
 
 	venus_hfi_for_each_bus(device, bus) {
-		if (bus) {
+		if (bus && bus->devfreq) {
 			if (!bus->is_prfm_gov_used) {
-				freq = __calc_bw(bus, &device->bus_vote);
+				mutex_lock(&bus->devfreq->lock);
+				rc = update_devfreq(bus->devfreq);
+				mutex_unlock(&bus->devfreq->lock);
+				if (rc)
+					goto err_no_mem;
 			} else {
-				freq = bus->range[1];
-				dprintk(VIDC_DBG, "%s %s perf Vote %u\n",
-						__func__, bus->name,
-						bus->range[1]);
+				bus->devfreq->nb.notifier_call(
+					&bus->devfreq->nb, 0, NULL);
 			}
-			rc = __vote_bandwidth(bus, &freq);
-		} else {
-			dprintk(VIDC_ERR, "No BUS to Vote\n");
 		}
 	}
 
@@ -4010,6 +4071,10 @@ static void __deinit_bus(struct venus_hfi_device *device)
 	device->bus_vote = DEFAULT_BUS_VOTE;
 
 	venus_hfi_for_each_bus_reverse(device, bus) {
+		devfreq_remove_device(bus->devfreq);
+		bus->devfreq = NULL;
+		dev_set_drvdata(bus->dev, NULL);
+
 		msm_bus_scale_unregister(bus->client);
 		bus->client = NULL;
 	}
@@ -4024,14 +4089,33 @@ static int __init_bus(struct venus_hfi_device *device)
 		return -EINVAL;
 
 	venus_hfi_for_each_bus(device, bus) {
-		if (!strcmp(bus->mode, "msm-vidc-llcc")) {
+		struct devfreq_dev_profile profile = {
+			.initial_freq = 0,
+			.polling_ms = INT_MAX,
+			.freq_table = NULL,
+			.max_state = 0,
+			.target = __devfreq_target,
+			.get_dev_status = __devfreq_get_status,
+			.exit = NULL,
+		};
+
+		if (!strcmp(bus->governor, "msm-vidc-llcc")) {
 			if (msm_vidc_syscache_disable) {
 				dprintk(VIDC_DBG,
 					 "Skipping LLC bus init %s: %s\n",
-				bus->name, bus->mode);
+				bus->name, bus->governor);
 				continue;
 			}
 		}
+
+		/*
+		 * This is stupid, but there's no other easy way to ahold
+		 * of struct bus_info in venus_hfi_devfreq_*()
+		 */
+		WARN(dev_get_drvdata(bus->dev), "%s's drvdata already set\n",
+				dev_name(bus->dev));
+		dev_set_drvdata(bus->dev, device);
+
 		bus->client = msm_bus_scale_register(bus->master, bus->slave,
 				bus->name, false);
 		if (IS_ERR_OR_NULL(bus->client)) {
@@ -4041,6 +4125,24 @@ static int __init_bus(struct venus_hfi_device *device)
 			bus->client = NULL;
 			goto err_add_dev;
 		}
+
+		bus->devfreq_prof = profile;
+		bus->devfreq = devfreq_add_device(bus->dev,
+				&bus->devfreq_prof, bus->governor, NULL);
+		if (IS_ERR_OR_NULL(bus->devfreq)) {
+			rc = PTR_ERR(bus->devfreq) ?: -EBADHANDLE;
+			dprintk(VIDC_ERR,
+					"Failed to add devfreq device for bus %s and governor %s: %d\n",
+					bus->name, bus->governor, rc);
+			bus->devfreq = NULL;
+			goto err_add_dev;
+		}
+
+		/*
+		 * Devfreq starts monitoring immediately, since we are just
+		 * initializing stuff at this point, force it to suspend
+		 */
+		devfreq_suspend_device(bus->devfreq);
 	}
 
 	return 0;

@@ -436,10 +436,16 @@ static int msm_vidc_populate_bus(struct device *dev,
 		goto err_bus;
 	}
 
-	rc = of_property_read_string(dev->of_node, "qcom,mode",
-			&bus->mode);
+	rc = of_property_read_string(dev->of_node, "qcom,bus-governor",
+			&bus->governor);
+	if (rc) {
+		rc = 0;
+		dprintk(VIDC_DBG,
+				"'qcom,bus-governor' not found, default to performance governor\n");
+		bus->governor = PERF_GOV;
+	}
 
-	if (!strcmp(bus->mode, PERF_GOV))
+	if (!strcmp(bus->governor, PERF_GOV))
 		bus->is_prfm_gov_used = true;
 
 	rc = of_property_read_u32_array(dev->of_node, "qcom,bus-range-kbps",
@@ -457,8 +463,8 @@ static int msm_vidc_populate_bus(struct device *dev,
 
 	buses->count++;
 	bus->dev = dev;
-	dprintk(VIDC_DBG, "Found bus %s [%d->%d] with mode %s\n",
-			bus->name, bus->master, bus->slave, bus->mode);
+	dprintk(VIDC_DBG, "Found bus %s [%d->%d] with governor %s\n",
+			bus->name, bus->master, bus->slave, bus->governor);
 err_bus:
 	return rc;
 }
