@@ -135,9 +135,8 @@ int msm_v4l2_s_ext_ctrl(struct file *file, void *fh,
 					struct v4l2_ext_controls *a)
 {
 	struct msm_vidc_inst *vidc_inst = get_vidc_inst(file, fh);
-	struct video_device *vdev = video_devdata(file);
 
-	return msm_vidc_s_ext_ctrl((void *)vidc_inst, vdev->v4l2_dev->mdev, a);
+	return msm_vidc_s_ext_ctrl((void *)vidc_inst, a);
 }
 
 int msm_v4l2_g_ext_ctrl(struct file *file, void *fh,
