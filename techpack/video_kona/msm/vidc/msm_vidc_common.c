@@ -1467,6 +1467,7 @@ error:
 static void msm_vidc_comm_update_ctrl_limits(struct msm_vidc_inst *inst)
 {
 	struct v4l2_format *f;
+	u32 codec = get_v4l2_codec(inst);
 
 	if (inst->session_type == MSM_VIDC_ENCODER) {
 		f = &inst->fmts[OUTPUT_PORT].v4l2_fmt;
@@ -1476,19 +1477,28 @@ static void msm_vidc_comm_update_ctrl_limits(struct msm_vidc_inst *inst)
 			return;
 		msm_vidc_comm_update_ctrl(inst, V4L2_CID_MPEG_VIDEO_BITRATE,
 				&inst->capability.cap[CAP_BITRATE]);
-		msm_vidc_comm_update_ctrl(inst,
-				V4L2_CID_MPEG_VIDC_VIDEO_LTRCOUNT,
-				&inst->capability.cap[CAP_LTR_COUNT]);
+		if (codec == V4L2_PIX_FMT_H264 || codec == V4L2_PIX_FMT_HEVC)
+			msm_vidc_comm_update_ctrl(inst,
+					V4L2_CID_MPEG_VIDC_VIDEO_LTRCOUNT,
+					&inst->capability.cap[CAP_LTR_COUNT]);
 		msm_vidc_comm_update_ctrl(inst,
 				V4L2_CID_MPEG_VIDEO_B_FRAMES,
 				&inst->capability.cap[CAP_BFRAME]);
 	}
-	msm_vidc_comm_update_ctrl(inst,
-			V4L2_CID_MPEG_VIDEO_H264_LEVEL,
-			&inst->capability.cap[CAP_H264_LEVEL]);
-	msm_vidc_comm_update_ctrl(inst,
-			V4L2_CID_MPEG_VIDEO_HEVC_LEVEL,
-			&inst->capability.cap[CAP_HEVC_LEVEL]);
+	switch (codec) {
+	case V4L2_PIX_FMT_H264:
+		msm_vidc_comm_update_ctrl(inst,
+				V4L2_CID_MPEG_VIDEO_H264_LEVEL,
+				&inst->capability.cap[CAP_H264_LEVEL]);
+		break;
+	case V4L2_PIX_FMT_HEVC:
+		msm_vidc_comm_update_ctrl(inst,
+				V4L2_CID_MPEG_VIDEO_HEVC_LEVEL,
+				&inst->capability.cap[CAP_HEVC_LEVEL]);
+		break;
+	default:
+		break;
+	}
 	/* Default value of level is unknown, but since we are not using unknown value
 	   while updating level controls, we need to reinitialize inst->level to HFI
 	   unknown value */

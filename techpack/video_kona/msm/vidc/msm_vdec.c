@@ -348,6 +348,7 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 		.default_value = SINGLE_OUTPUT_BUFFER,
 		.step = 1,
 		.qmenu = NULL,
+		.flags = V4L2_CTRL_FLAG_VOLATILE,
 	},
 	{
 		.id = V4L2_CID_MIN_BUFFERS_FOR_OUTPUT,
@@ -358,6 +359,7 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 		.default_value = SINGLE_INPUT_BUFFER,
 		.step = 1,
 		.qmenu = NULL,
+		.flags = V4L2_CTRL_FLAG_VOLATILE,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDC_VIDEO_FRAME_RATE,
@@ -919,6 +921,9 @@ int msm_vdec_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		 * initialized to proper values
 		 */
 		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_STREAM_OUTPUT_MODE:
+		return msm_comm_set_stream_output_mode(inst, ctrl->val ?
+			HAL_VIDEO_DECODER_SECONDARY : HAL_VIDEO_DECODER_PRIMARY);
 	case V4L2_CID_MPEG_VIDC_VIDEO_BUFFER_SIZE_LIMIT:
 		inst->buffer_size_limit = ctrl->val;
 		break;

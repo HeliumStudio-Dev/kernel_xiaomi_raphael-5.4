@@ -50,6 +50,7 @@ static const char *const mpeg_video_rate_control[] = {
 	"VBR CFR",
 	"CBR CFR",
 	"MBR CFR",
+	"RC OFF",
 	"CBR VFR",
 	"MBR VFR",
 	"CQ",
@@ -163,6 +164,26 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.qmenu = NULL,
 	},
 	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_BUFFER_SIZE_LIMIT_LEGACY,
+		.name = "Legacy buffer size limit",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0,
+		.maximum = INT_MAX,
+		.default_value = 0,
+		.step = 1,
+		.qmenu = NULL,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_BUFFER_SIZE_LIMIT,
+		.name = "Buffer size limit",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0,
+		.maximum = INT_MAX,
+		.default_value = 0,
+		.step = 1,
+		.qmenu = NULL,
+	},
+	{
 		.id = V4L2_CID_MIN_BUFFERS_FOR_CAPTURE,
 		.name = "CAPTURE Count",
 		.type = V4L2_CTRL_TYPE_INTEGER,
@@ -171,6 +192,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.default_value = SINGLE_OUTPUT_BUFFER,
 		.step = 1,
 		.qmenu = NULL,
+		.flags = V4L2_CTRL_FLAG_VOLATILE,
 	},
 	{
 		.id = V4L2_CID_MIN_BUFFERS_FOR_OUTPUT,
@@ -181,6 +203,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.default_value = SINGLE_INPUT_BUFFER,
 		.step = 1,
 		.qmenu = NULL,
+		.flags = V4L2_CTRL_FLAG_VOLATILE,
 	},
 
 	{
@@ -482,6 +505,18 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		(1 << V4L2_MPEG_VIDEO_H264_LOOP_FILTER_MODE_ENABLED) |
 		(1 << V4L2_MPEG_VIDEO_H264_LOOP_FILTER_MODE_DISABLED) |
 		(1 << DB_DISABLE_SLICE_BOUNDARY)
+		),
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDEO_HEADER_MODE,
+		.name = "Sequence Header Mode",
+		.type = V4L2_CTRL_TYPE_MENU,
+		.minimum = V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE,
+		.maximum = V4L2_MPEG_VIDEO_HEADER_MODE_JOINED_WITH_1ST_FRAME,
+		.default_value = V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE,
+		.menu_skip_mask = ~(
+		(1 << V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE) |
+		(1 << V4L2_MPEG_VIDEO_HEADER_MODE_JOINED_WITH_1ST_FRAME)
 		),
 	},
 	{
@@ -1943,6 +1978,14 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 			V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE,
 			ctrl->val, inst->sid);
 		break;
+	case V4L2_CID_MPEG_VIDEO_HEADER_MODE:
+		inst->prepend_sps_pps_to_idr =
+			ctrl->val ==
+			V4L2_MPEG_VIDEO_HEADER_MODE_JOINED_WITH_1ST_FRAME;
+		break;
+	case V4L2_CID_MPEG_VIDEO_PREPEND_SPSPPS_TO_IDR:
+		inst->prepend_sps_pps_to_idr = !!ctrl->val;
+		break;
 	case V4L2_CID_MPEG_VIDC_CAPTURE_FRAME_RATE:
 	case V4L2_CID_MPEG_VIDC_VIDEO_HEVC_MAX_HIER_CODING_LAYER:
 	case V4L2_CID_MPEG_VIDEO_HEVC_HIER_CODING_TYPE:
@@ -1952,7 +1995,6 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_ALPHA:
 	case V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_BETA:
 	case V4L2_CID_MPEG_VIDC_VIDEO_AU_DELIMITER:
-	case V4L2_CID_MPEG_VIDEO_PREPEND_SPSPPS_TO_IDR:
 	case V4L2_CID_MPEG_VIDC_VIDEO_VPX_ERROR_RESILIENCE:
 	case V4L2_CID_MPEG_VIDEO_HEVC_HIER_CODING_L0_QP:
 	case V4L2_CID_MPEG_VIDEO_HEVC_HIER_CODING_L1_QP:
@@ -1981,6 +2023,8 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_VIDEO_H264_CHROMA_QP_INDEX_OFFSET:
 	case V4L2_CID_MPEG_VIDC_SUPERFRAME:
 	case V4L2_CID_MPEG_VIDC_ENABLE_ONLY_BASE_LAYER_IR:
+	case V4L2_CID_MPEG_VIDC_VIDEO_BUFFER_SIZE_LIMIT_LEGACY:
+	case V4L2_CID_MPEG_VIDC_VIDEO_BUFFER_SIZE_LIMIT:
 		s_vpr_h(sid, "Control set: ID : 0x%x Val : %d\n",
 			ctrl->id, ctrl->val);
 		break;
@@ -3505,7 +3549,6 @@ int msm_venc_set_sequence_header_mode(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
 	struct hfi_device *hdev;
-	struct v4l2_ctrl *ctrl;
 	struct hfi_enable enable;
 	u32 codec;
 
@@ -3519,11 +3562,7 @@ int msm_venc_set_sequence_header_mode(struct msm_vidc_inst *inst)
 	if (!(codec == V4L2_PIX_FMT_H264 || codec == V4L2_PIX_FMT_HEVC))
 		return 0;
 
-	ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_PREPEND_SPSPPS_TO_IDR);
-	if (ctrl->val)
-		enable.enable = true;
-	else
-		enable.enable = false;
+	enable.enable = inst->prepend_sps_pps_to_idr;
 
 	s_vpr_h(inst->sid, "%s: %d\n", __func__, enable.enable);
 	rc = call_hfi_op(hdev, session_set_property, inst->session,

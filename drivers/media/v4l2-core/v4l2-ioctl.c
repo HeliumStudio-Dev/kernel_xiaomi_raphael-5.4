@@ -905,11 +905,27 @@ static void v4l_print_default(const void *arg, bool write_only)
 static bool check_ext_ctrls(struct v4l2_ext_controls *c, unsigned long ioctl)
 {
 	__u32 i;
+	__u32 id;
 
 	/* zero the reserved fields */
 	c->reserved[0] = 0;
 	for (i = 0; i < c->count; i++)
 		c->controls[i].reserved2[0] = 0;
+
+	/*
+	 * Downstream QTI Codec2 sends the standard minimum-buffer controls
+	 * as single MPEG-class S_EXT_CTRLS requests. The controls belong to
+	 * the user class, so normalize only this legacy VIDC handshake before
+	 * the generic class validation below.
+	 */
+	if (ioctl == VIDIOC_S_EXT_CTRLS &&
+	    c->which == V4L2_CTRL_CLASS_MPEG && c->count == 1 &&
+	    c->controls) {
+		id = c->controls[0].id;
+		if (id == V4L2_CID_MIN_BUFFERS_FOR_CAPTURE ||
+		    id == V4L2_CID_MIN_BUFFERS_FOR_OUTPUT)
+			c->which = V4L2_CTRL_WHICH_CUR_VAL;
+	}
 
 	switch (c->which) {
 	case V4L2_CID_PRIVATE_BASE:

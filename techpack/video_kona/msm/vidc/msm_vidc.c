@@ -26,6 +26,162 @@
 static int try_get_ctrl_for_instance(struct msm_vidc_inst *inst,
 	struct v4l2_ctrl *ctrl);
 
+static int msm_vidc_legacy_hevc_profile_to_standard(s32 value)
+{
+	switch (value) {
+	case V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN:
+		return V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN;
+	case V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN10:
+		return V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_10;
+	case V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN_STILL_PIC:
+		return V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_STILL_PICTURE;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int msm_vidc_legacy_hevc_profile_from_standard(s32 value)
+{
+	switch (value) {
+	case V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN:
+		return V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN;
+	case V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_10:
+		return V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN10;
+	case V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_STILL_PICTURE:
+		return V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN_STILL_PIC;
+	default:
+		return -EINVAL;
+	}
+}
+
+static u32 msm_vidc_legacy_hevc_profile_mask(u32 standard_mask)
+{
+	u32 legacy_mask = 0;
+	int standard_value;
+	int legacy_value;
+
+	for (standard_value = V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN;
+		standard_value <= V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_10;
+		standard_value++) {
+		if (!(standard_mask & BIT(standard_value)))
+			continue;
+		legacy_value = msm_vidc_legacy_hevc_profile_from_standard(
+			standard_value);
+		if (legacy_value >= 0)
+			legacy_mask |= BIT(legacy_value);
+	}
+
+	return legacy_mask;
+}
+
+/* legacy value = standard HEVC level * 2 + standard HEVC tier */
+static int msm_vidc_legacy_hevc_tier_level_to_standard(s32 value,
+	s32 *level, s32 *tier)
+{
+	if (value == V4L2_MPEG_VIDC_VIDEO_HEVC_LEVEL_UNKNOWN) {
+		*level = -1;
+		*tier = -1;
+		return 0;
+	}
+	if (value < V4L2_MPEG_VIDC_VIDEO_HEVC_LEVEL_MAIN_TIER_LEVEL_1 ||
+		value > V4L2_MPEG_VIDC_VIDEO_HEVC_LEVEL_HIGH_TIER_LEVEL_6_2)
+		return -EINVAL;
+	*level = value / 2;
+	*tier = value % 2;
+	return 0;
+}
+
+static int msm_vidc_legacy_hevc_tier_level_from_standard(s32 level, s32 tier)
+{
+	if (level < V4L2_MPEG_VIDEO_HEVC_LEVEL_1 ||
+		level > V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2 ||
+		tier < V4L2_MPEG_VIDEO_HEVC_TIER_MAIN ||
+		tier > V4L2_MPEG_VIDEO_HEVC_TIER_HIGH)
+		return -EINVAL;
+	return level * 2 + tier;
+}
+
+static u32 msm_vidc_legacy_hevc_tier_level_mask(u32 level_mask, u32 tier_mask)
+{
+	u32 legacy_mask = 0;
+	int level;
+
+	for (level = V4L2_MPEG_VIDEO_HEVC_LEVEL_1;
+		level <= V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2; level++) {
+		if (!(level_mask & BIT(level)))
+			continue;
+		if (tier_mask & BIT(V4L2_MPEG_VIDEO_HEVC_TIER_MAIN))
+			legacy_mask |= BIT(level * 2);
+		if (tier_mask & BIT(V4L2_MPEG_VIDEO_HEVC_TIER_HIGH))
+			legacy_mask |= BIT(level * 2 + 1);
+	}
+
+	return legacy_mask;
+}
+
+static int msm_vidc_get_legacy_hevc_tier_level(struct msm_vidc_inst *inst)
+{
+	s32 level;
+	s32 tier;
+
+	if ((inst->level & ~0xf0000000) == HFI_LEVEL_UNKNOWN)
+		return V4L2_MPEG_VIDC_VIDEO_HEVC_LEVEL_UNKNOWN;
+
+	level = msm_comm_hfi_to_v4l2(V4L2_CID_MPEG_VIDEO_HEVC_LEVEL,
+		inst->level & ~0xf0000000, inst->sid);
+	if (level < 0)
+		return level;
+	tier = (inst->level >> 28) == HFI_HEVC_TIER_HIGH ?
+		V4L2_MPEG_VIDEO_HEVC_TIER_HIGH :
+		V4L2_MPEG_VIDEO_HEVC_TIER_MAIN;
+
+	return msm_vidc_legacy_hevc_tier_level_from_standard(level, tier);
+}
+
+static int msm_vidc_legacy_vp9_profile_to_standard(s32 value)
+{
+	switch (value) {
+	case V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P0:
+		return V4L2_MPEG_VIDEO_VP9_PROFILE_0;
+	case V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P2_10:
+		return V4L2_MPEG_VIDEO_VP9_PROFILE_2;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int msm_vidc_legacy_vp9_profile_from_standard(s32 value)
+{
+	switch (value) {
+	case V4L2_MPEG_VIDEO_VP9_PROFILE_0:
+		return V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P0;
+	case V4L2_MPEG_VIDEO_VP9_PROFILE_2:
+		return V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P2_10;
+	default:
+		return -EINVAL;
+	}
+}
+
+static u32 msm_vidc_legacy_vp9_profile_mask(u32 standard_mask)
+{
+	u32 legacy_mask = 0;
+	int standard_value;
+	int legacy_value;
+
+	for (standard_value = V4L2_MPEG_VIDEO_VP9_PROFILE_0;
+		standard_value <= V4L2_MPEG_VIDEO_VP9_PROFILE_2;
+		standard_value++) {
+		if (!(standard_mask & BIT(standard_value)))
+			continue;
+		legacy_value = msm_vidc_legacy_vp9_profile_from_standard(
+			standard_value);
+		if (legacy_value >= 0)
+			legacy_mask |= BIT(legacy_value);
+	}
+
+	return legacy_mask;
+}
+
 static int get_poll_flags(void *instance)
 {
 	struct msm_vidc_inst *inst = instance;
@@ -128,6 +284,8 @@ int msm_vidc_query_ctrl(void *instance, struct v4l2_queryctrl *q_ctrl)
 	int rc = 0;
 	struct msm_vidc_inst *inst = instance;
 	struct v4l2_ctrl *ctrl;
+	struct v4l2_ctrl *tier_ctrl;
+	u32 id;
 
 	if (!inst || !q_ctrl) {
 		d_vpr_e("%s: invalid params %pK %pK\n",
@@ -135,10 +293,18 @@ int msm_vidc_query_ctrl(void *instance, struct v4l2_queryctrl *q_ctrl)
 		return -EINVAL;
 	}
 
+	id = q_ctrl->id;
+	if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE)
+		q_ctrl->id = V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
+	else if (id == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE)
+		q_ctrl->id = V4L2_CID_MPEG_VIDEO_VP9_PROFILE;
+	else if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL)
+		q_ctrl->id = V4L2_CID_MPEG_VIDEO_HEVC_LEVEL;
 	ctrl = v4l2_ctrl_find(&inst->ctrl_handler, q_ctrl->id);
 	if (!ctrl) {
 		s_vpr_e(inst->sid, "%s: get_ctrl failed for id %d\n",
-			__func__, q_ctrl->id);
+			__func__, id);
+		q_ctrl->id = id;
 		return -EINVAL;
 	}
 	q_ctrl->minimum = ctrl->minimum;
@@ -155,6 +321,50 @@ int msm_vidc_query_ctrl(void *instance, struct v4l2_queryctrl *q_ctrl)
 		q_ctrl->flags = 0;
 		q_ctrl->step = ctrl->step;
 	}
+	if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE) {
+		q_ctrl->minimum = V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN;
+		q_ctrl->maximum =
+			V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN_STILL_PIC;
+		rc = msm_vidc_legacy_hevc_profile_from_standard(
+			q_ctrl->default_value);
+		if (rc < 0) {
+			q_ctrl->id = id;
+			return rc;
+		}
+		q_ctrl->default_value = rc;
+		rc = 0;
+		q_ctrl->flags = msm_vidc_legacy_hevc_profile_mask(
+			q_ctrl->flags);
+	} else if (id == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE) {
+		q_ctrl->minimum = V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_UNUSED;
+		q_ctrl->maximum = V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P2_10;
+		rc = msm_vidc_legacy_vp9_profile_from_standard(
+			q_ctrl->default_value);
+		if (rc < 0) {
+			q_ctrl->id = id;
+			return rc;
+		}
+		q_ctrl->default_value = rc;
+		rc = 0;
+		q_ctrl->flags = msm_vidc_legacy_vp9_profile_mask(
+			q_ctrl->flags);
+	} else if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL) {
+		tier_ctrl = v4l2_ctrl_find(&inst->ctrl_handler,
+			V4L2_CID_MPEG_VIDEO_HEVC_TIER);
+		if (!tier_ctrl) {
+			q_ctrl->id = id;
+			return -EINVAL;
+		}
+		q_ctrl->minimum =
+			V4L2_MPEG_VIDC_VIDEO_HEVC_LEVEL_MAIN_TIER_LEVEL_1;
+		q_ctrl->maximum = V4L2_MPEG_VIDC_VIDEO_HEVC_LEVEL_UNKNOWN;
+		q_ctrl->default_value =
+			V4L2_MPEG_VIDC_VIDEO_HEVC_LEVEL_UNKNOWN;
+		q_ctrl->flags = msm_vidc_legacy_hevc_tier_level_mask(
+			q_ctrl->flags, ~(tier_ctrl->menu_skip_mask)) |
+			BIT(V4L2_MPEG_VIDC_VIDEO_HEVC_LEVEL_UNKNOWN);
+	}
+	q_ctrl->id = id;
 	s_vpr_h(inst->sid,
 		"query ctrl: %s: min %d, max %d, default %d step %d flags %#x\n",
 		ctrl->name, q_ctrl->minimum, q_ctrl->maximum,
@@ -168,6 +378,8 @@ int msm_vidc_query_menu(void *instance, struct v4l2_querymenu *qmenu)
 	int rc = 0;
 	struct msm_vidc_inst *inst = instance;
 	struct v4l2_ctrl *ctrl;
+	u32 id;
+	u32 index;
 
 	if (!inst || !qmenu) {
 		d_vpr_e("%s: invalid params %pK %pK\n",
@@ -175,21 +387,77 @@ int msm_vidc_query_menu(void *instance, struct v4l2_querymenu *qmenu)
 		return -EINVAL;
 	}
 
+	id = qmenu->id;
+	index = qmenu->index;
+	if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL) {
+		struct v4l2_ctrl *level_ctrl;
+		struct v4l2_ctrl *tier_ctrl;
+		s32 level;
+		s32 tier;
+
+		if (index == V4L2_MPEG_VIDC_VIDEO_HEVC_LEVEL_UNKNOWN)
+			return 0;
+		rc = msm_vidc_legacy_hevc_tier_level_to_standard(index,
+			&level, &tier);
+		if (rc)
+			return rc;
+		level_ctrl = v4l2_ctrl_find(&inst->ctrl_handler,
+			V4L2_CID_MPEG_VIDEO_HEVC_LEVEL);
+		tier_ctrl = v4l2_ctrl_find(&inst->ctrl_handler,
+			V4L2_CID_MPEG_VIDEO_HEVC_TIER);
+		if (!level_ctrl || !tier_ctrl)
+			return -EINVAL;
+		if (level < level_ctrl->minimum || level > level_ctrl->maximum)
+			return -EINVAL;
+		if ((level_ctrl->menu_skip_mask & BIT(level)) ||
+			(tier_ctrl->menu_skip_mask & BIT(tier)))
+			return -EINVAL;
+		return 0;
+	}
+	if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE) {
+		qmenu->id = V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
+		rc = msm_vidc_legacy_hevc_profile_to_standard(qmenu->index);
+		if (rc < 0) {
+			qmenu->id = id;
+			qmenu->index = index;
+			return rc;
+		}
+		qmenu->index = rc;
+		rc = 0;
+	} else if (id == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE) {
+		qmenu->id = V4L2_CID_MPEG_VIDEO_VP9_PROFILE;
+		rc = msm_vidc_legacy_vp9_profile_to_standard(qmenu->index);
+		if (rc < 0) {
+			qmenu->id = id;
+			qmenu->index = index;
+			return rc;
+		}
+		qmenu->index = rc;
+		rc = 0;
+	}
+
 	ctrl = v4l2_ctrl_find(&inst->ctrl_handler, qmenu->id);
 	if (!ctrl) {
 		s_vpr_e(inst->sid, "%s: get_ctrl failed for id %d\n",
-			__func__, qmenu->id);
+			__func__, id);
+		qmenu->id = id;
+		qmenu->index = index;
 		return -EINVAL;
 	}
 	if (ctrl->type != V4L2_CTRL_TYPE_MENU) {
 		s_vpr_e(inst->sid, "%s: ctrl: %s: type (%d) is not MENU type\n",
 			__func__, ctrl->name, ctrl->type);
+		qmenu->id = id;
+		qmenu->index = index;
 		return -EINVAL;
 	}
-	if (qmenu->index < ctrl->minimum || qmenu->index > ctrl->maximum)
+	if (qmenu->index < ctrl->minimum || qmenu->index > ctrl->maximum) {
+		qmenu->id = id;
+		qmenu->index = index;
 		return -EINVAL;
+	}
 
-	if (ctrl->menu_skip_mask & (1 << qmenu->index))
+	if (ctrl->menu_skip_mask & BIT(qmenu->index))
 		rc = -EINVAL;
 
 	s_vpr_h(inst->sid,
@@ -197,6 +465,8 @@ int msm_vidc_query_menu(void *instance, struct v4l2_querymenu *qmenu)
 		__func__, ctrl->name, ctrl->minimum, ctrl->maximum,
 		ctrl->menu_skip_mask, qmenu->id, qmenu->index,
 		rc ? "not supported" : "supported");
+	qmenu->id = id;
+	qmenu->index = index;
 	return rc;
 }
 EXPORT_SYMBOL(msm_vidc_query_menu);
@@ -250,29 +520,380 @@ EXPORT_SYMBOL(msm_vidc_g_fmt);
 int msm_vidc_s_ctrl(void *instance, struct v4l2_control *control)
 {
 	struct msm_vidc_inst *inst = instance;
+	struct v4l2_control translated;
+	int value;
+	int rc;
 
 	if (!inst || !control)
 		return -EINVAL;
 
+	if (control->id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL) {
+		s32 level;
+		s32 tier;
+
+		rc = msm_vidc_legacy_hevc_tier_level_to_standard(
+			control->value, &level, &tier);
+		if (rc)
+			return rc;
+		if (level < 0) {
+			inst->level = HFI_LEVEL_UNKNOWN;
+			return 0;
+		}
+		translated.id = V4L2_CID_MPEG_VIDEO_HEVC_LEVEL;
+		translated.value = level;
+		rc = msm_comm_s_ctrl(instance, &translated);
+		if (rc)
+			return rc;
+		translated.id = V4L2_CID_MPEG_VIDEO_HEVC_TIER;
+		translated.value = tier;
+		return msm_comm_s_ctrl(instance, &translated);
+	}
+
+	if (control->id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE) {
+		translated = *control;
+		translated.id = V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
+		value = msm_vidc_legacy_hevc_profile_to_standard(
+			control->value);
+		if (value < 0)
+			return value;
+		translated.value = value;
+		return msm_comm_s_ctrl(instance, &translated);
+	} else if (control->id == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE) {
+		translated = *control;
+		translated.id = V4L2_CID_MPEG_VIDEO_VP9_PROFILE;
+		value = msm_vidc_legacy_vp9_profile_to_standard(control->value);
+		if (value < 0)
+			return value;
+		translated.value = value;
+		return msm_comm_s_ctrl(instance, &translated);
+	}
+
 	return msm_comm_s_ctrl(instance, control);
 }
 EXPORT_SYMBOL(msm_vidc_s_ctrl);
+
+static bool is_min_buffer_ctrl(u32 id)
+{
+	return id == V4L2_CID_MIN_BUFFERS_FOR_CAPTURE ||
+		id == V4L2_CID_MIN_BUFFERS_FOR_OUTPUT;
+}
+
+int msm_vidc_s_ext_ctrl(void *instance, struct v4l2_ext_controls *controls)
+{
+	struct msm_vidc_inst *inst = instance;
+	struct v4l2_ctrl *ctrl;
+	struct video_device *vdev;
+	struct v4l2_ext_controls translated;
+	struct v4l2_ext_control *translated_controls;
+	u32 i;
+	u32 cid;
+	u32 translated_count = 0;
+	u32 tier_level_count = 0;
+	u32 source_count;
+	int rc;
+	int value;
+	s32 level;
+	s32 tier;
+	bool has_legacy_ctrl = false;
+	bool reset_unknown_level = false;
+
+	if (!inst || !controls || (controls->count && !controls->controls))
+		return -EINVAL;
+
+	/*
+	 * QTI Codec2 writes a single MIN_BUFFERS control while probing each
+	 * component. These controls describe dynamic driver requirements and
+	 * remain read-only; accept the legacy write without replacing the
+	 * value reported by try_get_ctrl_for_instance().
+	 */
+	if (controls->count == 1 &&
+	    is_min_buffer_ctrl(controls->controls[0].id)) {
+		ctrl = v4l2_ctrl_find(&inst->ctrl_handler,
+			controls->controls[0].id);
+		if (!ctrl) {
+			controls->error_idx = 0;
+			return -EINVAL;
+		}
+		if (controls->controls[0].value < ctrl->minimum ||
+		    controls->controls[0].value > ctrl->maximum) {
+			controls->error_idx = 0;
+			return -ERANGE;
+		}
+		controls->error_idx = controls->count;
+		return 0;
+	}
+
+	for (i = 0; i < controls->count; i++) {
+		cid = controls->controls[i].id;
+		if (cid == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE ||
+			cid == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE ||
+			cid == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL) {
+			has_legacy_ctrl = true;
+			if (cid == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL)
+				tier_level_count++;
+		}
+	}
+
+	vdev = inst->event_handler.vdev;
+	if (!vdev || !vdev->v4l2_dev)
+		return -EINVAL;
+
+	if (!has_legacy_ctrl)
+		return v4l2_s_ext_ctrls(NULL, &inst->ctrl_handler, vdev,
+			vdev->v4l2_dev->mdev, controls);
+
+	translated_controls = kcalloc(controls->count + tier_level_count,
+		sizeof(*translated_controls), GFP_KERNEL);
+	if (!translated_controls)
+		return -ENOMEM;
+	translated = *controls;
+	translated.controls = translated_controls;
+
+	for (i = 0; i < controls->count; i++) {
+		cid = controls->controls[i].id;
+		if (cid == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE) {
+			value = msm_vidc_legacy_hevc_profile_to_standard(
+				controls->controls[i].value);
+			if (value < 0) {
+				controls->error_idx = i;
+				rc = value;
+				goto free_controls;
+			}
+			translated.controls[translated_count].id =
+				V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
+			translated.controls[translated_count].value = value;
+			translated_count++;
+		} else if (cid == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE) {
+			value = msm_vidc_legacy_vp9_profile_to_standard(
+				controls->controls[i].value);
+			if (value < 0) {
+				controls->error_idx = i;
+				rc = value;
+				goto free_controls;
+			}
+			translated.controls[translated_count].id =
+				V4L2_CID_MPEG_VIDEO_VP9_PROFILE;
+			translated.controls[translated_count].value = value;
+			translated_count++;
+		} else if (cid == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL) {
+			rc = msm_vidc_legacy_hevc_tier_level_to_standard(
+				controls->controls[i].value, &level, &tier);
+			if (rc) {
+				controls->error_idx = i;
+				goto free_controls;
+			}
+			if (level < 0) {
+				reset_unknown_level = true;
+				continue;
+			}
+			translated.controls[translated_count].id =
+				V4L2_CID_MPEG_VIDEO_HEVC_LEVEL;
+			translated.controls[translated_count].value = level;
+			translated_count++;
+			translated.controls[translated_count].id =
+				V4L2_CID_MPEG_VIDEO_HEVC_TIER;
+			translated.controls[translated_count].value = tier;
+			translated_count++;
+		} else {
+			translated.controls[translated_count] =
+				controls->controls[i];
+			translated_count++;
+		}
+	}
+	translated.count = translated_count;
+
+	if (!translated_count) {
+		if (reset_unknown_level)
+			inst->level = HFI_LEVEL_UNKNOWN;
+		controls->error_idx = controls->count;
+		rc = 0;
+		goto free_controls;
+	}
+
+	rc = v4l2_s_ext_ctrls(NULL, &inst->ctrl_handler, vdev,
+		vdev->v4l2_dev->mdev, &translated);
+	if (rc && translated.error_idx < translated.count) {
+		translated_count = 0;
+		for (i = 0; i < controls->count; i++) {
+			cid = controls->controls[i].id;
+			source_count = cid ==
+				V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL ? 2 : 1;
+			if (cid == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL &&
+				controls->controls[i].value ==
+				V4L2_MPEG_VIDC_VIDEO_HEVC_LEVEL_UNKNOWN)
+				source_count = 0;
+			if (translated.error_idx <
+				translated_count + source_count) {
+				controls->error_idx = i;
+				break;
+			}
+			translated_count += source_count;
+		}
+	} else {
+		controls->error_idx = controls->count;
+	}
+	if (!rc && reset_unknown_level)
+		inst->level = HFI_LEVEL_UNKNOWN;
+
+free_controls:
+	kfree(translated_controls);
+	return rc;
+}
+EXPORT_SYMBOL(msm_vidc_s_ext_ctrl);
+
+int msm_vidc_g_ext_ctrl(void *instance, struct v4l2_ext_controls *controls)
+{
+	struct msm_vidc_inst *inst = instance;
+	struct video_device *vdev;
+	struct v4l2_ext_controls translated;
+	struct v4l2_ext_control *translated_controls;
+	u32 i;
+	u32 id;
+	int rc;
+	int value;
+	bool has_legacy_ctrl = false;
+
+	if (!inst || !controls || (controls->count && !controls->controls))
+		return -EINVAL;
+
+	for (i = 0; i < controls->count; i++) {
+		id = controls->controls[i].id;
+		if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE ||
+			id == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE ||
+			id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL) {
+			has_legacy_ctrl = true;
+			break;
+		}
+	}
+
+	vdev = inst->event_handler.vdev;
+	if (!vdev || !vdev->v4l2_dev)
+		return -EINVAL;
+
+	if (!has_legacy_ctrl)
+		return v4l2_g_ext_ctrls(&inst->ctrl_handler, vdev,
+			vdev->v4l2_dev->mdev, controls);
+
+	translated_controls = kcalloc(controls->count,
+		sizeof(*translated_controls), GFP_KERNEL);
+	if (!translated_controls)
+		return -ENOMEM;
+	translated = *controls;
+	translated.controls = translated_controls;
+
+	for (i = 0; i < controls->count; i++) {
+		translated.controls[i] = controls->controls[i];
+		id = translated.controls[i].id;
+		if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE)
+			translated.controls[i].id =
+				V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
+		else if (id == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE)
+			translated.controls[i].id =
+				V4L2_CID_MPEG_VIDEO_VP9_PROFILE;
+		else if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL)
+			translated.controls[i].id =
+				V4L2_CID_MPEG_VIDEO_HEVC_LEVEL;
+	}
+
+	rc = v4l2_g_ext_ctrls(&inst->ctrl_handler, vdev,
+		vdev->v4l2_dev->mdev, &translated);
+	controls->error_idx = translated.error_idx;
+	if (rc)
+		goto free_get_controls;
+
+	for (i = 0; i < controls->count; i++) {
+		id = controls->controls[i].id;
+		controls->controls[i] = translated.controls[i];
+		controls->controls[i].id = id;
+		if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE) {
+			value = msm_comm_hfi_to_v4l2(
+				V4L2_CID_MPEG_VIDEO_HEVC_PROFILE,
+				inst->profile, inst->sid);
+			if (value < 0) {
+				rc = value;
+				goto get_conversion_failed;
+			}
+			value = msm_vidc_legacy_hevc_profile_from_standard(
+				value);
+		} else if (id == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE) {
+			value = msm_comm_hfi_to_v4l2(
+				V4L2_CID_MPEG_VIDEO_VP9_PROFILE,
+				inst->profile, inst->sid);
+			if (value < 0) {
+				rc = value;
+				goto get_conversion_failed;
+			}
+			value = msm_vidc_legacy_vp9_profile_from_standard(
+				value);
+		} else if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL) {
+			value = msm_vidc_get_legacy_hevc_tier_level(inst);
+		} else {
+			continue;
+		}
+		if (value < 0) {
+			rc = value;
+			goto get_conversion_failed;
+		}
+		controls->controls[i].value = value;
+	}
+	controls->error_idx = controls->count;
+	goto free_get_controls;
+
+get_conversion_failed:
+	controls->error_idx = i;
+free_get_controls:
+	kfree(translated_controls);
+	return rc;
+}
+EXPORT_SYMBOL(msm_vidc_g_ext_ctrl);
 
 int msm_vidc_g_ctrl(void *instance, struct v4l2_control *control)
 {
 	struct msm_vidc_inst *inst = instance;
 	struct v4l2_ctrl *ctrl = NULL;
 	int rc = 0;
+	int value;
+	u32 id;
 
 	if (!inst || !control)
 		return -EINVAL;
 
-	ctrl = v4l2_ctrl_find(&inst->ctrl_handler, control->id);
-	if (ctrl) {
-		rc = try_get_ctrl_for_instance(inst, ctrl);
-		if (!rc)
-			control->value = ctrl->val;
+	id = control->id;
+	if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL) {
+		value = msm_vidc_get_legacy_hevc_tier_level(inst);
+		if (value < 0)
+			return value;
+		control->value = value;
+		return 0;
 	}
+	if (id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE)
+		control->id = V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
+	else if (id == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE)
+		control->id = V4L2_CID_MPEG_VIDEO_VP9_PROFILE;
+	ctrl = v4l2_ctrl_find(&inst->ctrl_handler, control->id);
+	if (!ctrl) {
+		control->id = id;
+		return -EINVAL;
+	}
+	rc = try_get_ctrl_for_instance(inst, ctrl);
+	if (!rc)
+		control->value = ctrl->val;
+	if (!rc && id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE) {
+		value = msm_vidc_legacy_hevc_profile_from_standard(
+			control->value);
+		if (value < 0)
+			rc = value;
+		else
+			control->value = value;
+	} else if (!rc && id == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE) {
+		value = msm_vidc_legacy_vp9_profile_from_standard(
+			control->value);
+		if (value < 0)
+			rc = value;
+		else
+			control->value = value;
+	}
+	control->id = id;
 
 	return rc;
 }
@@ -1356,10 +1977,15 @@ static int try_get_ctrl_for_instance(struct msm_vidc_inst *inst,
 			V4L2_CID_MPEG_VIDEO_HEVC_PROFILE,
 			inst->profile, inst->sid);
 		break;
+	case V4L2_CID_MPEG_VIDEO_VP9_PROFILE:
+		ctrl->val = msm_comm_hfi_to_v4l2(
+			V4L2_CID_MPEG_VIDEO_VP9_PROFILE,
+			inst->profile, inst->sid);
+		break;
 	case V4L2_CID_MPEG_VIDEO_H264_LEVEL:
 		ctrl->val = msm_comm_hfi_to_v4l2(
 			V4L2_CID_MPEG_VIDEO_H264_LEVEL,
-			inst->level, inst->sid);
+			inst->level & ~0xf0000000, inst->sid);
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_VP8_PROFILE_LEVEL:
 		ctrl->val = msm_comm_hfi_to_v4l2(
@@ -1405,9 +2031,29 @@ static int try_get_ctrl_for_instance(struct msm_vidc_inst *inst,
 	return rc;
 }
 
+static int msm_vidc_op_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
+{
+	struct msm_vidc_inst *inst;
+
+	if (!ctrl) {
+		d_vpr_e("%s: invalid parameters for ctrl\n", __func__);
+		return -EINVAL;
+	}
+
+	inst = container_of(ctrl->handler,
+		struct msm_vidc_inst, ctrl_handler);
+	if (!inst) {
+		d_vpr_e("%s: invalid parameters for inst\n", __func__);
+		return -EINVAL;
+	}
+
+	return try_get_ctrl_for_instance(inst, ctrl);
+}
+
 static const struct v4l2_ctrl_ops msm_vidc_ctrl_ops = {
 
 	.s_ctrl = msm_vidc_op_s_ctrl,
+	.g_volatile_ctrl = msm_vidc_op_g_volatile_ctrl,
 };
 
 static struct msm_vidc_inst_smem_ops  msm_vidc_smem_ops = {
