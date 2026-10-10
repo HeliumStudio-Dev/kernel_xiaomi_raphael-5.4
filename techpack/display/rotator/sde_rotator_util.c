@@ -19,7 +19,11 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/regulator/consumer.h>
+#ifdef CONFIG_DISP_NV12_ALIGN
+#include <media/msm_media_info_sm8150.h>
+#else
 #include <media/msm_media_info.h>
+#endif
 #include <linux/videodev2.h>
 #include <linux/ion.h>
 
