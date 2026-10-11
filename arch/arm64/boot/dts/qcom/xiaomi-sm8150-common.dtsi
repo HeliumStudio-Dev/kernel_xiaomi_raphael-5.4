@@ -18,7 +18,7 @@
 #include "sm8150-thermal-overlay.dtsi"
 
 &qupv3_se12_2uart {
-	status = "ok";
+	status = "disabled";
 };
 
 &vendor {

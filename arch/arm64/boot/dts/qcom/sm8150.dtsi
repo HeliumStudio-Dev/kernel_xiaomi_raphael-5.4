@@ -1027,6 +1027,7 @@
 		compatible = "qcom,devfreq-icc-ddr";
 		governor = "bw_hwmon";
 		interconnects = <&compute_noc MASTER_NPU &mc_virt SLAVE_EBI1>;
+		qcom,active-only;
 		operating-points-v2 = <&ddr_bw_opp_table>;
 	};
 
@@ -3514,6 +3515,8 @@
 		qcom,smmu-s1-bypass;
 		iommus = <&apps_smmu 0x620 0x00>;
 		qcom,iommu-dma-addr-pool = <0x10000000 0x40000000>;
+
+		status = "disabled";
 	};
 
 	demux {
