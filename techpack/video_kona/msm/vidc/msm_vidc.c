@@ -23,6 +23,11 @@
 
 #define MAX_EVENTS 30
 
+#ifdef CONFIG_SM8150_SUPPORT
+#define LEGACY_BUF_INPUT_TAG 5
+#define LEGACY_BUF_OUTPUT_TAG 6
+#endif
+
 static int try_get_ctrl_for_instance(struct msm_vidc_inst *inst,
 	struct v4l2_ctrl *ctrl);
 
@@ -267,8 +272,14 @@ int msm_vidc_g_ctrl(void *instance, struct v4l2_control *control)
 	if (!inst || !control)
 		return -EINVAL;
 
+	if (control->id == V4L2_CID_MIN_BUFFERS_FOR_CAPTURE ||
+	    control->id == V4L2_CID_MIN_BUFFERS_FOR_OUTPUT)
+		return msm_comm_g_ctrl(inst, control);
+
 	ctrl = v4l2_ctrl_find(&inst->ctrl_handler, control->id);
 	if (ctrl) {
+		if (ctrl->flags & V4L2_CTRL_FLAG_VOLATILE)
+			return msm_comm_g_ctrl(inst, control);
 		rc = try_get_ctrl_for_instance(inst, ctrl);
 		if (!rc)
 			control->value = ctrl->val;
@@ -373,6 +384,9 @@ int msm_vidc_qbuf(void *instance, struct media_device *mdev,
 	unsigned int i = 0;
 	struct buf_queue *q = NULL;
 	u32 cr = 0;
+#ifdef CONFIG_SM8150_SUPPORT
+	u32 output_tag;
+#endif
 
 	if (!inst || !inst->core || !b || !valid_v4l2_buffer(b, inst)) {
 		d_vpr_e("%s: invalid params %pK %pK\n", __func__, inst, b);
@@ -401,6 +415,18 @@ int msm_vidc_qbuf(void *instance, struct media_device *mdev,
 		goto unlock;
 	}
 	inst->last_qbuf_time_ns = ktime_get_ns();
+#ifdef CONFIG_SM8150_SUPPORT
+	if (b->type == OUTPUT_MPLANE) {
+		/* The slot must exist before accessing its pending FTB cookie. */
+		if (b->index >= q->vb2_bufq.num_buffers) {
+			rc = -EINVAL;
+			goto unlock;
+		}
+		output_tag = inst->output_tags[b->index];
+		inst->output_tags[b->index] =
+			b->m.planes[0].reserved[LEGACY_BUF_OUTPUT_TAG];
+	}
+#endif
 
 	for (i = 0; i < b->length; i++) {
 		b->m.planes[i].m.fd =
@@ -418,7 +444,11 @@ int msm_vidc_qbuf(void *instance, struct media_device *mdev,
 
 	if (b->type == INPUT_MPLANE) {
 		rc = msm_comm_store_input_tag(&inst->etb_data, b->index,
+#ifdef CONFIG_SM8150_SUPPORT
+				b->m.planes[0].reserved[LEGACY_BUF_INPUT_TAG],
+#else
 				b->m.planes[0].reserved[MSM_VIDC_INPUT_TAG_1],
+#endif
 				0, inst->sid);
 		if (rc) {
 			s_vpr_e(inst->sid, "Failed to store input tag");
@@ -436,6 +466,10 @@ int msm_vidc_qbuf(void *instance, struct media_device *mdev,
 		b->flags |= V4L2_BUF_FLAG_PERF_MODE;
 
 	rc = vb2_qbuf(&q->vb2_bufq, mdev, b);
+#ifdef CONFIG_SM8150_SUPPORT
+	if (rc && b->type == OUTPUT_MPLANE)
+		inst->output_tags[b->index] = output_tag;
+#endif
 	if (rc)
 		s_vpr_e(inst->sid, "Failed to qbuf, %d\n", rc);
 unlock:
@@ -467,6 +501,15 @@ int msm_vidc_dqbuf(void *instance, struct v4l2_buffer *b)
 
 	mutex_lock(&q->lock);
 	rc = vb2_dqbuf(&q->vb2_bufq, b, true);
+#ifdef CONFIG_SM8150_SUPPORT
+	if (!rc && b->type == OUTPUT_MPLANE) {
+		/* Fetch before this slot can be queued again with a new cookie. */
+		rc = msm_comm_fetch_input_tag(&inst->fbd_data, b->index,
+					      &b->m.planes[0].reserved[LEGACY_BUF_INPUT_TAG],
+					      &b->m.planes[0].reserved[LEGACY_BUF_OUTPUT_TAG],
+					      inst->sid);
+	}
+#endif
 	mutex_unlock(&q->lock);
 	if (rc == -EAGAIN) {
 		return rc;
@@ -481,6 +524,7 @@ int msm_vidc_dqbuf(void *instance, struct v4l2_buffer *b)
 		b->m.planes[i].reserved[MSM_VIDC_DATA_OFFSET] =
 					b->m.planes[i].data_offset;
 	}
+#ifndef CONFIG_SM8150_SUPPORT
 	if (b->type == OUTPUT_MPLANE) {
 		rc = msm_comm_fetch_input_tag(&inst->fbd_data, b->index,
 				&b->m.planes[0].reserved[MSM_VIDC_INPUT_TAG_1],
@@ -491,6 +535,7 @@ int msm_vidc_dqbuf(void *instance, struct v4l2_buffer *b)
 			return -EINVAL;
 		}
 	}
+#endif
 
 	return rc;
 }
@@ -1299,9 +1344,64 @@ int msm_vidc_private(void *vidc_inst, unsigned int cmd,
 }
 EXPORT_SYMBOL(msm_vidc_private);
 
+#ifdef CONFIG_SM8150_SUPPORT
+static int msm_vidc_set_legacy_profile(struct msm_vidc_inst *inst,
+				       struct v4l2_ctrl *ctrl)
+{
+	struct v4l2_ctrl *standard;
+	u32 id, value;
+
+	mutex_lock(&inst->lock);
+	switch (ctrl->id) {
+	case V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE:
+		id = V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
+		value = ctrl->val == V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN10 ?
+			V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_10 :
+			ctrl->val == V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN ?
+			V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN :
+			V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_STILL_PICTURE;
+		inst->profile = msm_comm_v4l2_to_hfi(id, value, inst->sid);
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE:
+		id = V4L2_CID_MPEG_VIDEO_VP9_PROFILE;
+		value = ctrl->val == V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P0 ?
+			V4L2_MPEG_VIDEO_VP9_PROFILE_0 : V4L2_MPEG_VIDEO_VP9_PROFILE_2;
+		inst->profile = msm_comm_v4l2_to_hfi(id, value, inst->sid);
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL:
+		id = V4L2_CID_MPEG_VIDEO_HEVC_LEVEL;
+		value = ctrl->val / 2;
+		inst->level = msm_comm_v4l2_to_hfi(id, value, inst->sid) |
+			(msm_comm_v4l2_to_hfi(V4L2_CID_MPEG_VIDEO_HEVC_TIER,
+			ctrl->val % 2, inst->sid) << 28);
+		standard = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_HEVC_TIER);
+		standard->val = ctrl->val % 2;
+		standard->cur.val = standard->val;
+		break;
+	default:
+		mutex_unlock(&inst->lock);
+		return -EINVAL;
+	}
+
+	/* Both ABIs feed the same controls used to program the firmware. */
+	standard = get_ctrl(inst, id);
+	standard->val = value;
+	standard->cur.val = value;
+	mutex_unlock(&inst->lock);
+	return 0;
+}
+#endif
+
 static int msm_vidc_try_set_ctrl(void *instance, struct v4l2_ctrl *ctrl)
 {
 	struct msm_vidc_inst *inst = instance;
+
+#ifdef CONFIG_SM8150_SUPPORT
+	if (ctrl->id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE ||
+	    ctrl->id == V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL ||
+	    ctrl->id == V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE)
+		return msm_vidc_set_legacy_profile(inst, ctrl);
+#endif
 
 	if (inst->session_type == MSM_VIDC_DECODER)
 		return msm_vdec_s_ctrl(instance, ctrl);
@@ -1346,6 +1446,35 @@ static int try_get_ctrl_for_instance(struct msm_vidc_inst *inst,
 	int rc = 0;
 
 	switch (ctrl->id) {
+#ifdef CONFIG_SM8150_SUPPORT
+	case V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES:
+		ctrl->val = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_GOP_SIZE)->cur.val;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES:
+		ctrl->val = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_B_FRAMES)->cur.val;
+		break;
+	case V4L2_CID_MPEG_VIDEO_HEADER_MODE:
+		ctrl->val = get_ctrl(inst,
+				     V4L2_CID_MPEG_VIDEO_PREPEND_SPSPPS_TO_IDR)->cur.val;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE:
+		ctrl->val = inst->profile == HFI_HEVC_PROFILE_MAIN10 ?
+			V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN10 :
+			inst->profile == HFI_HEVC_PROFILE_MAIN_STILL_PIC ?
+			V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN_STILL_PIC :
+			V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE:
+		ctrl->val = inst->profile == HFI_VP9_PROFILE_P2_10B ?
+			V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P2_10 :
+			V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P0;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL:
+		ctrl->val = msm_comm_hfi_to_v4l2(V4L2_CID_MPEG_VIDEO_HEVC_LEVEL,
+						 inst->level & 0x0fffffff, inst->sid) * 2;
+		ctrl->val += (inst->level >> 28) == HFI_HEVC_TIER_HIGH;
+		break;
+#endif
 	case V4L2_CID_MPEG_VIDEO_H264_PROFILE:
 		ctrl->val = msm_comm_hfi_to_v4l2(
 			V4L2_CID_MPEG_VIDEO_H264_PROFILE,
@@ -1405,9 +1534,22 @@ static int try_get_ctrl_for_instance(struct msm_vidc_inst *inst,
 	return rc;
 }
 
+static int msm_vidc_op_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
+{
+	struct msm_vidc_inst *inst = container_of(ctrl->handler,
+		struct msm_vidc_inst, ctrl_handler);
+	int rc;
+
+	mutex_lock(&inst->lock);
+	rc = try_get_ctrl_for_instance(inst, ctrl);
+	mutex_unlock(&inst->lock);
+	return rc;
+}
+
 static const struct v4l2_ctrl_ops msm_vidc_ctrl_ops = {
 
 	.s_ctrl = msm_vidc_op_s_ctrl,
+	.g_volatile_ctrl = msm_vidc_op_g_volatile_ctrl,
 };
 
 static struct msm_vidc_inst_smem_ops  msm_vidc_smem_ops = {

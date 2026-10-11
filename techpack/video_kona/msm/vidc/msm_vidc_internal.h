@@ -59,6 +59,14 @@
 #define INPUT_MPLANE V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE
 #define OUTPUT_MPLANE V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
 
+#ifdef CONFIG_SM8150_SUPPORT
+/* Match the 4.14 HAL ABI; value 3 is reserved for disabled rate control. */
+#define V4L2_MPEG_VIDEO_BITRATE_MODE_MBR 2
+#define V4L2_MPEG_VIDEO_BITRATE_MODE_CBR_VFR 4
+#define V4L2_MPEG_VIDEO_BITRATE_MODE_MBR_VFR 5
+#define V4L2_MPEG_VIDEO_BITRATE_MODE_CQ 6
+#endif
+
 #define RATE_CONTROL_OFF (V4L2_MPEG_VIDEO_BITRATE_MODE_CQ + 1)
 #define RATE_CONTROL_LOSSLESS (V4L2_MPEG_VIDEO_BITRATE_MODE_CQ + 2)
 #define SYS_MSG_START HAL_SYS_INIT_DONE
@@ -526,6 +534,10 @@ struct msm_vidc_inst {
 	struct msm_vidc_list cvpbufs;
 	struct msm_vidc_list etb_data;
 	struct msm_vidc_list fbd_data;
+#ifdef CONFIG_SM8150_SUPPORT
+	/* Pending CAPTURE cookies, protected by bufq[OUTPUT_PORT].lock. */
+	u32 output_tags[VIDEO_MAX_FRAME];
+#endif
 	struct msm_vidc_list window_data;
 	struct msm_vidc_list client_data;
 	struct buffer_requirements buff_req;
@@ -614,6 +626,9 @@ struct msm_vidc_buffer {
 	struct msm_smem smem[VIDEO_MAX_PLANES];
 	struct vb2_v4l2_buffer vvb;
 	enum msm_vidc_flags flags;
+#ifdef CONFIG_SM8150_SUPPORT
+	u32 output_tag;
+#endif
 };
 
 struct msm_vidc_cvp_buffer {

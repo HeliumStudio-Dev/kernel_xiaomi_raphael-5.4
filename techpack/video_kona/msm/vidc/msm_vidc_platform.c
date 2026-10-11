@@ -948,6 +948,8 @@ static struct msm_vidc_codec_capability sm8150_capabilities[] = {
 	/* ((1920 * 1088) / 256) * 120*/
 	{CAP_MBS_PER_SECOND, ENC|DEC, VP8, 36, 979200, 1, 979200},
 	{CAP_FRAMERATE, ENC|DEC, VP8, 1, 240, 1, 30},
+	{CAP_BFRAME, ENC, VP8, 0, 0, 1, 0},
+	{CAP_LTR_COUNT, ENC, VP8, 0, 0, 1, 0},
 	{CAP_BITRATE, ENC, VP8, 1, 40000000, 1, 20000000},
 	{CAP_BITRATE, DEC, VP8, 1, 100000000, 1, 20000000},
 

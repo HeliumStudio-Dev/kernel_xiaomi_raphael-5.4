@@ -47,13 +47,13 @@
 #define MIN_NUM_ENC_CAPTURE_BUFFERS 5
 
 static const char *const mpeg_video_rate_control[] = {
-	"VBR CFR",
-	"CBR CFR",
-	"MBR CFR",
-	"CBR VFR",
-	"MBR VFR",
-	"CQ",
-	NULL
+	[V4L2_MPEG_VIDEO_BITRATE_MODE_VBR] = "VBR CFR",
+	[V4L2_MPEG_VIDEO_BITRATE_MODE_CBR] = "CBR CFR",
+	[V4L2_MPEG_VIDEO_BITRATE_MODE_MBR] = "MBR CFR",
+	[V4L2_MPEG_VIDEO_BITRATE_MODE_CBR_VFR] = "CBR VFR",
+	[V4L2_MPEG_VIDEO_BITRATE_MODE_MBR_VFR] = "MBR VFR",
+	[V4L2_MPEG_VIDEO_BITRATE_MODE_CQ] = "CQ",
+	[V4L2_MPEG_VIDEO_BITRATE_MODE_CQ + 1] = NULL
 };
 
 static const char *const vp8_profile_level[] = {
@@ -92,6 +92,51 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.menu_skip_mask = 0,
 		.qmenu = NULL,
 	},
+#ifdef CONFIG_SM8150_SUPPORT
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD,
+		.name = "IDR Period",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 1,
+		.maximum = INT_MAX,
+		.default_value = 1,
+		.step = 1,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES,
+		.name = "Legacy P Frames",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0,
+		.maximum = MAX_GOP,
+		.default_value = 2 * DEFAULT_FPS - 1,
+		.step = 1,
+		.flags = V4L2_CTRL_FLAG_VOLATILE,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES,
+		.name = "Legacy B Frames",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0,
+		.maximum = MAX_NUM_B_FRAMES,
+		.default_value = 0,
+		.step = 1,
+		.flags = V4L2_CTRL_FLAG_VOLATILE,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_REQUEST_IFRAME,
+		.name = "Legacy Request I Frame",
+		.type = V4L2_CTRL_TYPE_BUTTON,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDEO_HEADER_MODE,
+		.name = "Header Mode",
+		.type = V4L2_CTRL_TYPE_MENU,
+		.minimum = V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE,
+		.maximum = V4L2_MPEG_VIDEO_HEADER_MODE_JOINED_WITH_1ST_FRAME,
+		.default_value = V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE,
+		.flags = V4L2_CTRL_FLAG_VOLATILE,
+	},
+#endif
 	{
 		.id = V4L2_CID_MPEG_VIDEO_GOP_SIZE,
 		.name = "Intra Period for P frames",
@@ -1583,6 +1628,27 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		__func__, ctrl->name, ctrl->id, ctrl->val);
 
 	switch (ctrl->id) {
+#ifdef CONFIG_SM8150_SUPPORT
+	/* The handler lock is held; delegate without acquiring it again. */
+	case V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES:
+		return __v4l2_ctrl_s_ctrl(get_ctrl(inst,
+			V4L2_CID_MPEG_VIDEO_GOP_SIZE), ctrl->val);
+	case V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES:
+		return __v4l2_ctrl_s_ctrl(get_ctrl(inst,
+			V4L2_CID_MPEG_VIDEO_B_FRAMES), ctrl->val);
+	case V4L2_CID_MPEG_VIDC_VIDEO_REQUEST_IFRAME:
+		return __v4l2_ctrl_s_ctrl(get_ctrl(inst,
+			V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME), 0);
+	case V4L2_CID_MPEG_VIDEO_HEADER_MODE:
+		return __v4l2_ctrl_s_ctrl(get_ctrl(inst,
+			V4L2_CID_MPEG_VIDEO_PREPEND_SPSPPS_TO_IDR), ctrl->val);
+	case V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD:
+		if (codec != V4L2_PIX_FMT_H264 && codec != V4L2_PIX_FMT_HEVC)
+			return -EOPNOTSUPP;
+		if (inst->state == MSM_VIDC_START_DONE)
+			return msm_venc_set_idr_period(inst);
+		break;
+#endif
 	case V4L2_CID_MPEG_VIDEO_GOP_SIZE:
 		if (inst->state == MSM_VIDC_START_DONE) {
 			if (inst->all_intra) {
@@ -2289,6 +2355,10 @@ int msm_venc_set_idr_period(struct msm_vidc_inst *inst)
 		return 0;
 
 	idr_period.idr_period = 1;
+#ifdef CONFIG_SM8150_SUPPORT
+	idr_period.idr_period = get_ctrl(inst,
+					 V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD)->val;
+#endif
 
 	s_vpr_h(inst->sid, "%s: %d\n", __func__, idr_period.idr_period);
 	rc = call_hfi_op(hdev, session_set_property, inst->session,

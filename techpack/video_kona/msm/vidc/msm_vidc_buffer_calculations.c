@@ -663,22 +663,28 @@ int msm_vidc_calculate_input_buffer_count(struct msm_vidc_inst *inst)
 		return 0;
 
 	if (is_thumbnail_session(inst)) {
+		mutex_lock(&inst->lock);
 		fmt->count_min = fmt->count_min_host = fmt->count_actual =
 			SINGLE_INPUT_BUFFER;
+		mutex_unlock(&inst->lock);
 		return 0;
 	}
 
 	if (is_grid_session(inst)) {
+		mutex_lock(&inst->lock);
 		fmt->count_min = fmt->count_min_host = fmt->count_actual =
 			SINGLE_INPUT_BUFFER + 1;
+		mutex_unlock(&inst->lock);
 		return 0;
 	}
 
 	extra_buff_count = msm_vidc_get_extra_buff_count(inst,
 				HAL_BUFFER_INPUT);
+	mutex_lock(&inst->lock);
 	fmt->count_min = MIN_INPUT_BUFFERS;
 	fmt->count_min_host = fmt->count_actual =
 		fmt->count_min + extra_buff_count;
+	mutex_unlock(&inst->lock);
 
 	s_vpr_h(inst->sid, "%s: input min %d min_host %d actual %d\n",
 		__func__, fmt->count_min,
@@ -708,9 +714,11 @@ int msm_vidc_calculate_output_buffer_count(struct msm_vidc_inst *inst)
 		return 0;
 
 	if (is_thumbnail_session(inst)) {
+		mutex_lock(&inst->lock);
 		fmt->count_min = (codec == V4L2_PIX_FMT_VP9) ?
 			VP9_REFERENCE_COUNT : SINGLE_OUTPUT_BUFFER;
 		fmt->count_min_host = fmt->count_actual = fmt->count_min;
+		mutex_unlock(&inst->lock);
 		return 0;
 	}
 
@@ -732,9 +740,11 @@ int msm_vidc_calculate_output_buffer_count(struct msm_vidc_inst *inst)
 	}
 	extra_buff_count = msm_vidc_get_extra_buff_count(inst,
 				HAL_BUFFER_OUTPUT);
+	mutex_lock(&inst->lock);
 	fmt->count_min = output_min_count;
 	fmt->count_min_host = fmt->count_actual =
 		fmt->count_min + extra_buff_count;
+	mutex_unlock(&inst->lock);
 
 	s_vpr_h(inst->sid, "%s: output min %d min_host %d actual %d\n",
 		__func__, fmt->count_min, fmt->count_min_host,

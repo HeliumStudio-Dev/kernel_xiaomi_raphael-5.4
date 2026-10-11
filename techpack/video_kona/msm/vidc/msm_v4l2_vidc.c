@@ -8,6 +8,7 @@
 #include <linux/init.h>
 #include <linux/ioctl.h>
 #include <linux/list.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
@@ -26,6 +27,59 @@
 #include "msm_vidc_clocks.h"
 
 #define BASE_DEVICE_NUMBER 32
+
+#ifdef CONFIG_SM8150_SUPPORT
+#define LEGACY_BUF_FLAG_END_OF_SUBFRAME 0x00000080
+#define LEGACY_BUF_FLAG_CODECCONFIG 0x00020000
+#define LEGACY_BUF_FLAG_DATA_CORRUPT 0x00400000
+#define LEGACY_BUF_FLAG_EOS 0x02000000
+#define LEGACY_BUF_FLAG_READONLY 0x04000000
+#define LEGACY_BUF_FLAG_PERF_MODE 0x20000000
+
+static u32 msm_v4l2_from_legacy_flags(u32 flags)
+{
+	u32 result = flags & ~(LEGACY_BUF_FLAG_END_OF_SUBFRAME |
+		LEGACY_BUF_FLAG_CODECCONFIG | LEGACY_BUF_FLAG_DATA_CORRUPT |
+		LEGACY_BUF_FLAG_EOS | LEGACY_BUF_FLAG_READONLY |
+		LEGACY_BUF_FLAG_PERF_MODE);
+
+	if (flags & LEGACY_BUF_FLAG_END_OF_SUBFRAME)
+		result |= V4L2_BUF_FLAG_END_OF_SUBFRAME;
+	if (flags & LEGACY_BUF_FLAG_CODECCONFIG)
+		result |= V4L2_BUF_FLAG_CODECCONFIG;
+	if (flags & LEGACY_BUF_FLAG_DATA_CORRUPT)
+		result |= V4L2_BUF_FLAG_DATA_CORRUPT;
+	if (flags & LEGACY_BUF_FLAG_EOS)
+		result |= V4L2_BUF_FLAG_EOS;
+	if (flags & LEGACY_BUF_FLAG_READONLY)
+		result |= V4L2_BUF_FLAG_READONLY;
+	if (flags & LEGACY_BUF_FLAG_PERF_MODE)
+		result |= V4L2_BUF_FLAG_PERF_MODE;
+	return result;
+}
+
+static u32 msm_v4l2_to_legacy_flags(u32 flags)
+{
+	u32 result = flags & ~(V4L2_BUF_FLAG_END_OF_SUBFRAME |
+		V4L2_BUF_FLAG_CODECCONFIG | V4L2_BUF_FLAG_DATA_CORRUPT |
+		V4L2_BUF_FLAG_EOS | V4L2_BUF_FLAG_READONLY |
+		V4L2_BUF_FLAG_PERF_MODE);
+
+	if (flags & V4L2_BUF_FLAG_END_OF_SUBFRAME)
+		result |= LEGACY_BUF_FLAG_END_OF_SUBFRAME;
+	if (flags & V4L2_BUF_FLAG_CODECCONFIG)
+		result |= LEGACY_BUF_FLAG_CODECCONFIG;
+	if (flags & V4L2_BUF_FLAG_DATA_CORRUPT)
+		result |= LEGACY_BUF_FLAG_DATA_CORRUPT;
+	if (flags & V4L2_BUF_FLAG_EOS)
+		result |= LEGACY_BUF_FLAG_EOS;
+	if (flags & V4L2_BUF_FLAG_READONLY)
+		result |= LEGACY_BUF_FLAG_READONLY;
+	if (flags & V4L2_BUF_FLAG_PERF_MODE)
+		result |= LEGACY_BUF_FLAG_PERF_MODE;
+	return result;
+}
+#endif
 
 struct msm_vidc_drv *vidc_driver;
 
@@ -121,6 +175,59 @@ int msm_v4l2_g_ctrl(struct file *file, void *fh,
 	return msm_vidc_g_ctrl((void *)vidc_inst, a);
 }
 
+static int msm_v4l2_s_ext_ctrls(struct file *file, void *fh,
+				struct v4l2_ext_controls *ctrls)
+{
+	struct msm_vidc_inst *inst = get_vidc_inst(file, fh);
+	struct video_device *vdev = video_devdata(file);
+
+	return v4l2_s_ext_ctrls(&inst->event_handler, &inst->ctrl_handler,
+		vdev, vdev->v4l2_dev->mdev, ctrls);
+}
+
+static int msm_v4l2_g_ext_ctrls(struct file *file, void *fh,
+				struct v4l2_ext_controls *ctrls)
+{
+	struct msm_vidc_inst *inst = get_vidc_inst(file, fh);
+	struct video_device *vdev = video_devdata(file);
+
+	return v4l2_g_ext_ctrls(&inst->ctrl_handler, vdev,
+		vdev->v4l2_dev->mdev, ctrls);
+}
+
+#ifdef CONFIG_SM8150_SUPPORT
+static int msm_v4l2_s_parm(struct file *file, void *fh,
+			   struct v4l2_streamparm *parm)
+{
+	struct msm_vidc_inst *inst = get_vidc_inst(file, fh);
+	struct v4l2_fract *timeperframe = &parm->parm.output.timeperframe;
+	struct v4l2_control ctrl = {
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_FRAME_RATE,
+	};
+	u64 rate;
+	int rc;
+
+	if (parm->type != V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE ||
+	    !timeperframe->numerator || !timeperframe->denominator)
+		return -EINVAL;
+
+	/* The old HAL uses S_PARM; the firmware control uses Q16.16 fps. */
+	rate = div_u64((u64)timeperframe->denominator << 16,
+		       timeperframe->numerator);
+	if (rate > INT_MAX)
+		return -ERANGE;
+	ctrl.value = rate;
+	rc = msm_vidc_s_ctrl(inst, &ctrl);
+	if (rc)
+		return rc;
+
+	parm->parm.output.capability = V4L2_CAP_TIMEPERFRAME;
+	timeperframe->numerator = 1 << 16;
+	timeperframe->denominator = ctrl.value;
+	return 0;
+}
+#endif
+
 int msm_v4l2_reqbufs(struct file *file, void *fh,
 				struct v4l2_requestbuffers *b)
 {
@@ -133,13 +240,29 @@ int msm_v4l2_qbuf(struct file *file, void *fh,
 				struct v4l2_buffer *b)
 {
 	struct video_device *vdev = video_devdata(file);
-	return msm_vidc_qbuf(get_vidc_inst(file, fh), vdev->v4l2_dev->mdev, b);
+	int rc;
+
+#ifdef CONFIG_SM8150_SUPPORT
+	/* Translate before vb2 interprets bits shared with timestamp flags. */
+	b->flags = msm_v4l2_from_legacy_flags(b->flags);
+#endif
+	rc = msm_vidc_qbuf(get_vidc_inst(file, fh), vdev->v4l2_dev->mdev, b);
+#ifdef CONFIG_SM8150_SUPPORT
+	b->flags = msm_v4l2_to_legacy_flags(b->flags);
+#endif
+	return rc;
 }
 
 int msm_v4l2_dqbuf(struct file *file, void *fh,
 				struct v4l2_buffer *b)
 {
-	return msm_vidc_dqbuf(get_vidc_inst(file, fh), b);
+	int rc = msm_vidc_dqbuf(get_vidc_inst(file, fh), b);
+
+#ifdef CONFIG_SM8150_SUPPORT
+	if (!rc)
+		b->flags = msm_v4l2_to_legacy_flags(b->flags);
+#endif
+	return rc;
 }
 
 int msm_v4l2_streamon(struct file *file, void *fh,
@@ -239,6 +362,11 @@ const struct v4l2_ioctl_ops msm_v4l2_ioctl_ops = {
 	.vidioc_streamoff = msm_v4l2_streamoff,
 	.vidioc_s_ctrl = msm_v4l2_s_ctrl,
 	.vidioc_g_ctrl = msm_v4l2_g_ctrl,
+	.vidioc_s_ext_ctrls = msm_v4l2_s_ext_ctrls,
+	.vidioc_g_ext_ctrls = msm_v4l2_g_ext_ctrls,
+#ifdef CONFIG_SM8150_SUPPORT
+	.vidioc_s_parm = msm_v4l2_s_parm,
+#endif
 	.vidioc_queryctrl = msm_v4l2_queryctrl,
 	.vidioc_querymenu = msm_v4l2_querymenu,
 	.vidioc_subscribe_event = msm_v4l2_subscribe_event,

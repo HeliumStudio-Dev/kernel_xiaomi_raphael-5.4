@@ -620,6 +620,9 @@ int create_pkt_cmd_session_ftb(struct hfi_cmd_session_fill_buffer_packet *pkt,
 	pkt->alloc_len = output_frame->alloc_len;
 	pkt->filled_len = output_frame->filled_len;
 	pkt->offset = output_frame->offset;
+#ifdef CONFIG_SM8150_SUPPORT
+	pkt->output_tag = output_frame->output_tag;
+#endif
 	pkt->rgData[0] = output_frame->extradata_size;
 
 	trace_msm_v4l2_vidc_buffer_event_start("FTB",

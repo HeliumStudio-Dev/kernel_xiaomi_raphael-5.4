@@ -382,6 +382,9 @@ static int hfi_process_evt_release_buffer_ref(u32 device_id,
 	event_notify.hal_event_type = HAL_EVENT_RELEASE_BUFFER_REFERENCE;
 	event_notify.packet_buffer = data->packet_buffer;
 	event_notify.extra_data_buffer = data->extra_data_buffer;
+#ifdef CONFIG_SM8150_SUPPORT
+	event_notify.output_tag = data->output_tag;
+#endif
 
 	info->response_type = HAL_SESSION_EVENT_CHANGE;
 	info->response.event = event_notify;
@@ -863,6 +866,9 @@ static int hfi_process_session_ftb_done(
 		data_done.size = sizeof(struct msm_vidc_cb_data_done);
 
 		data_done.output_done.input_tag = pkt->input_tag;
+#ifdef CONFIG_SM8150_SUPPORT
+		data_done.output_done.output_tag = pkt->output_tag;
+#endif
 		data_done.output_done.timestamp_hi = pkt->time_stamp_hi;
 		data_done.output_done.timestamp_lo = pkt->time_stamp_lo;
 		data_done.output_done.flags1 = pkt->flags;
@@ -907,6 +913,9 @@ static int hfi_process_session_ftb_done(
 		data_done.output_done.start_y_coord = pkt->start_y_coord;
 		data_done.output_done.input_tag = pkt->input_tag;
 		data_done.output_done.input_tag2 = pkt->input_tag2;
+#ifdef CONFIG_SM8150_SUPPORT
+		data_done.output_done.output_tag = pkt->output_tag;
+#endif
 		data_done.output_done.picture_type = pkt->picture_type;
 		data_done.output_done.packet_buffer1 = pkt->packet_buffer;
 		data_done.output_done.extra_data_buffer =

@@ -336,7 +336,7 @@ struct msm_vidc_buffer *msm_comm_get_vidc_buffer(struct msm_vidc_inst *inst,
 void msm_comm_put_vidc_buffer(struct msm_vidc_inst *inst,
 		struct msm_vidc_buffer *mbuf);
 void handle_release_buffer_reference(struct msm_vidc_inst *inst,
-		struct msm_vidc_buffer *mbuf);
+		struct msm_vidc_buffer *mbuf, u32 output_tag);
 int msm_comm_vb2_buffer_done(struct msm_vidc_inst *inst,
 		struct msm_vidc_buffer *mbuf);
 int msm_comm_flush_vidc_buffer(struct msm_vidc_inst *inst,

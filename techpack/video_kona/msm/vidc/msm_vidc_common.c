@@ -552,6 +552,64 @@ int msm_comm_get_v4l2_level(int fourcc, int level, u32 sid)
 	}
 }
 
+#ifdef CONFIG_SM8150_SUPPORT
+static int msm_vidc_init_legacy_controls(struct msm_vidc_inst *inst,
+					 const struct v4l2_ctrl_ops *ops)
+{
+	static const char * const hevc_profiles[] = {
+		"Main", "Main 10", "Main Still Picture", NULL
+	};
+	static const char * const hevc_levels[] = {
+		"Main 1", "High 1", "Main 2", "High 2",
+		"Main 2.1", "High 2.1", "Main 3", "High 3",
+		"Main 3.1", "High 3.1", "Main 4", "High 4",
+		"Main 4.1", "High 4.1", "Main 5", "High 5",
+		"Main 5.1", "High 5.1", "Main 5.2", "High 5.2",
+		"Main 6", "High 6", "Main 6.1", "High 6.1",
+		"Main 6.2", "High 6.2", NULL
+	};
+	static const char * const vp9_profiles[] = {
+		"Unused", "Profile 0", "Profile 2 10-bit", NULL
+	};
+	struct v4l2_ctrl_config configs[] = {
+		{
+			.id = V4L2_CID_MPEG_VIDC_VIDEO_HEVC_PROFILE,
+			.name = "Legacy HEVC Profile",
+			.type = V4L2_CTRL_TYPE_MENU,
+			.max = V4L2_MPEG_VIDC_VIDEO_HEVC_PROFILE_MAIN_STILL_PIC,
+			.qmenu = hevc_profiles,
+		},
+		{
+			.id = V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL,
+			.name = "Legacy HEVC Tier Level",
+			.type = V4L2_CTRL_TYPE_MENU,
+			.max = V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2 * 2 + 1,
+			.qmenu = hevc_levels,
+		},
+		{
+			.id = V4L2_CID_MPEG_VIDC_VIDEO_VP9_PROFILE,
+			.name = "Legacy VP9 Profile",
+			.type = V4L2_CTRL_TYPE_MENU,
+			.min = V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P0,
+			.max = V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P2_10,
+			.def = V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_P0,
+			.menu_skip_mask = BIT(V4L2_MPEG_VIDC_VIDEO_VP9_PROFILE_UNUSED),
+			.qmenu = vp9_profiles,
+		},
+	};
+	u32 i, count = is_decode_session(inst) ? ARRAY_SIZE(configs) : 2;
+
+	for (i = 0; i < count; i++) {
+		configs[i].ops = ops;
+		configs[i].flags = V4L2_CTRL_FLAG_VOLATILE |
+			V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
+		if (!v4l2_ctrl_new_custom(&inst->ctrl_handler, &configs[i], NULL))
+			return inst->ctrl_handler.error;
+	}
+	return 0;
+}
+#endif
+
 int msm_comm_ctrl_init(struct msm_vidc_inst *inst,
 		struct msm_vidc_ctrl *drv_ctrls, u32 num_ctrls,
 		const struct v4l2_ctrl_ops *ctrl_ops)
@@ -583,8 +641,8 @@ int msm_comm_ctrl_init(struct msm_vidc_inst *inst,
 	for (; idx < (int) num_ctrls; idx++) {
 		struct v4l2_ctrl *ctrl = NULL;
 
-		if (IS_PRIV_CTRL(drv_ctrls[idx].id)) {
-			/*add private control*/
+		if (IS_PRIV_CTRL(drv_ctrls[idx].id) || drv_ctrls[idx].qmenu) {
+			/* Preserve driver menus even for standard control IDs. */
 			ctrl_cfg.def = drv_ctrls[idx].default_value;
 			ctrl_cfg.flags = 0;
 			ctrl_cfg.id = drv_ctrls[idx].id;
@@ -636,10 +694,18 @@ int msm_comm_ctrl_init(struct msm_vidc_inst *inst,
 
 		ctrl->flags |= drv_ctrls[idx].flags;
 		ctrl->flags |= V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
+		if (ctrl->id == V4L2_CID_MIN_BUFFERS_FOR_CAPTURE ||
+		    ctrl->id == V4L2_CID_MIN_BUFFERS_FOR_OUTPUT) {
+			ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE;
+		}
 		inst->ctrls[idx] = ctrl;
 	}
 	inst->num_ctrls = num_ctrls;
 
+#ifdef CONFIG_SM8150_SUPPORT
+	if (is_decode_session(inst) || is_encode_session(inst))
+		return msm_vidc_init_legacy_controls(inst, ctrl_ops);
+#endif
 	return ret_val;
 }
 
@@ -1482,6 +1548,11 @@ static void msm_vidc_comm_update_ctrl_limits(struct msm_vidc_inst *inst)
 		msm_vidc_comm_update_ctrl(inst,
 				V4L2_CID_MPEG_VIDEO_B_FRAMES,
 				&inst->capability.cap[CAP_BFRAME]);
+#ifdef CONFIG_SM8150_SUPPORT
+		msm_vidc_comm_update_ctrl(inst,
+					  V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES,
+					  &inst->capability.cap[CAP_BFRAME]);
+#endif
 	}
 	msm_vidc_comm_update_ctrl(inst,
 			V4L2_CID_MPEG_VIDEO_H264_LEVEL,
@@ -1489,6 +1560,19 @@ static void msm_vidc_comm_update_ctrl_limits(struct msm_vidc_inst *inst)
 	msm_vidc_comm_update_ctrl(inst,
 			V4L2_CID_MPEG_VIDEO_HEVC_LEVEL,
 			&inst->capability.cap[CAP_HEVC_LEVEL]);
+#ifdef CONFIG_SM8150_SUPPORT
+	{
+		struct hal_capability_supported cap =
+			inst->capability.cap[CAP_HEVC_LEVEL];
+
+		/* Legacy levels interleave main and high tier entries. */
+		cap.min *= 2;
+		cap.max = cap.max * 2 + 1;
+		cap.default_value *= 2;
+		msm_vidc_comm_update_ctrl(inst,
+					  V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL, &cap);
+	}
+#endif
 	/* Default value of level is unknown, but since we are not using unknown value
 	   while updating level controls, we need to reinitialize inst->level to HFI
 	   unknown value */
@@ -1632,7 +1716,7 @@ static int msm_comm_update_capabilities(struct msm_vidc_inst *inst)
 }
 
 static void msm_vidc_queue_rbr_event(struct msm_vidc_inst *inst,
-		int fd, u32 offset)
+		int fd, u32 offset, u32 output_tag)
 {
 	struct v4l2_event buf_event = {0};
 	u32 *ptr;
@@ -1641,6 +1725,9 @@ static void msm_vidc_queue_rbr_event(struct msm_vidc_inst *inst,
 	ptr = (u32 *)buf_event.u.data;
 	ptr[0] = fd;
 	ptr[1] = offset;
+#ifdef CONFIG_SM8150_SUPPORT
+	ptr[2] = output_tag;
+#endif
 
 	v4l2_event_queue_fh(&inst->event_handler, &buf_event);
 }
@@ -1750,6 +1837,11 @@ static void handle_event_change(enum hal_command_response cmd, void *data)
 	{
 		struct msm_vidc_buffer *mbuf;
 		u32 planes[VIDEO_MAX_PLANES] = {0};
+		u32 output_tag = 0;
+
+#ifdef CONFIG_SM8150_SUPPORT
+		output_tag = event_notify->output_tag;
+#endif
 
 		s_vpr_l(inst->sid,
 			"rbr: data_buffer: %x extradata_buffer: %x\n",
@@ -1765,7 +1857,7 @@ static void handle_event_change(enum hal_command_response cmd, void *data)
 				"%s: data_addr %x, extradata_addr %x not found\n",
 				__func__, planes[0], planes[1]);
 		} else {
-			handle_release_buffer_reference(inst, mbuf);
+			handle_release_buffer_reference(inst, mbuf, output_tag);
 			kref_put_mbuf(mbuf);
 		}
 		goto err_bad_event;
@@ -1839,8 +1931,10 @@ static void handle_event_change(enum hal_command_response cmd, void *data)
 		msm_dcvs_try_enable(inst);
 		extra_buff_count = msm_vidc_get_extra_buff_count(inst,
 				HAL_BUFFER_OUTPUT);
+		mutex_lock(&inst->lock);
 		fmt->count_min = event_notify->fw_min_cnt;
 		fmt->count_min_host = fmt->count_min + extra_buff_count;
+		mutex_unlock(&inst->lock);
 		s_vpr_h(inst->sid,
 			"seq: hal buffer[%d] count: min %d min_host %d\n",
 			HAL_BUFFER_OUTPUT, fmt->count_min,
@@ -2690,7 +2784,12 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 
 	rc = msm_comm_store_input_tag(&inst->fbd_data, vb->index,
 			fill_buf_done->input_tag,
+#ifdef CONFIG_SM8150_SUPPORT
+			/* The old HAL uses the second word for the FTB cookie. */
+			fill_buf_done->output_tag, inst->sid);
+#else
 			fill_buf_done->input_tag2, inst->sid);
+#endif
 	if (rc)
 		s_vpr_e(inst->sid, "Failed to store input tag");
 
@@ -4438,6 +4537,9 @@ static void populate_frame_data(struct vidc_frame_data *data,
 		f = &inst->fmts[INPUT_PORT].v4l2_fmt;
 	} else if (vb->type == OUTPUT_MPLANE) {
 		data->buffer_type = msm_comm_get_hal_output_buffer(inst);
+#ifdef CONFIG_SM8150_SUPPORT
+		data->output_tag = mbuf->output_tag;
+#endif
 		f = &inst->fmts[OUTPUT_PORT].v4l2_fmt;
 	}
 
@@ -6973,6 +7075,10 @@ struct msm_vidc_buffer *msm_comm_get_vidc_buffer(struct msm_vidc_inst *inst,
 	vbuf = to_vb2_v4l2_buffer(vb2);
 	memcpy(&mbuf->vvb, vbuf, sizeof(struct vb2_v4l2_buffer));
 	vb = &mbuf->vvb.vb2_buf;
+#ifdef CONFIG_SM8150_SUPPORT
+	if (vb->type == OUTPUT_MPLANE)
+		mbuf->output_tag = inst->output_tags[vb->index];
+#endif
 
 	for (i = 0; i < vb->num_planes; i++) {
 		mbuf->smem[i].buffer_type = get_hal_buffer_type(vb->type, i);
@@ -7111,7 +7217,7 @@ unlock:
 }
 
 void handle_release_buffer_reference(struct msm_vidc_inst *inst,
-		struct msm_vidc_buffer *mbuf)
+		struct msm_vidc_buffer *mbuf, u32 output_tag)
 {
 	int rc = 0;
 	struct msm_vidc_buffer *temp;
@@ -7138,7 +7244,7 @@ void handle_release_buffer_reference(struct msm_vidc_inst *inst,
 		/* send RBR event to client */
 		msm_vidc_queue_rbr_event(inst,
 			mbuf->vvb.vb2_buf.planes[0].m.fd,
-			mbuf->vvb.vb2_buf.planes[0].data_offset);
+			mbuf->vvb.vb2_buf.planes[0].data_offset, output_tag);
 
 		/* clear RBR_PENDING flag */
 		mbuf->flags &= ~MSM_VIDC_FLAG_RBR_PENDING;
